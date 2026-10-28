@@ -1,0 +1,383 @@
+<!doctype html><html lang="fr"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Les Camemberts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one-screen game table — board on top, action tray below, question card slides up as a sheet */
+:root{
+  color-scheme:dark;
+  --bg:#0e1c2a; --surface:#162a3e; --surface2:#1e3650; --line:#2b4866;
+  --ink:#eef3f8; --muted:#97adc2; --gold:#f2c230;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  -webkit-tap-highlight-color:transparent;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.screen{height:100%;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
+
+/* Setup */
+#setup{justify-content:safe center;gap:22px;padding-block:20px;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:14px}
+.brand h1{font-family:var(--display);font-weight:800;font-size:2.4rem;line-height:1;margin:0;letter-spacing:-.02em}
+.brand p{margin:6px 0 0;color:var(--muted)}
+.label{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.chips{display:flex;gap:8px}
+.chip{flex:1;padding:12px;border-radius:12px;background:var(--surface);border:2px solid var(--line);font-weight:700}
+.chip[aria-pressed="true"]{border-color:var(--gold);background:var(--surface2)}
+.names{display:flex;flex-direction:column;gap:10px}
+.name-row{display:flex;align-items:center;gap:12px}
+.name-row input{flex:1;min-width:0;padding:13px 14px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink);font:inherit}
+.pawn{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:.8rem;font-weight:700;color:#10202f;border:2px solid rgba(255,255,255,.7)}
+.btn{padding:15px 18px;border-radius:14px;font-weight:700;font-family:var(--display);font-size:1.1rem}
+.btn-main{background:var(--gold);color:#1d1600}
+.btn-ghost{background:var(--surface);border:2px solid var(--line)}
+.rules{color:var(--muted);font-size:.9rem;line-height:1.5;margin:0}
+
+/* Game */
+#game{padding-block:8px;gap:8px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.turn{display:flex;align-items:center;gap:10px;min-width:0}
+.turn strong{font-family:var(--display);font-size:1.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.turn span{color:var(--muted);font-size:.85rem}
+.menu{padding:8px 12px;border-radius:10px;background:var(--surface);font-size:.85rem;color:var(--muted);flex:none}
+.sync{font-size:.72rem;color:var(--muted)}.sync.bad{color:#ff8a7a}
+.menu.armed{background:#7a2131;color:#fff}
+.board-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+#board{width:100%;height:100%;max-height:100%;aspect-ratio:1;max-width:100%}
+#board .sq{transition:opacity .2s}
+#board.choosing .sq{opacity:.35}
+#board.choosing .sq.target{opacity:1;cursor:pointer;stroke:#fff;stroke-width:3;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{stroke-width:6}}
+.token{transition:transform .45s cubic-bezier(.3,1.4,.5,1)}
+.tray{background:var(--surface);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.msg{margin:0;font-size:.95rem;line-height:1.4;min-height:1.4em}
+.row{display:flex;gap:12px;align-items:center}
+.die{width:64px;height:64px;border-radius:14px;background:#f6f1e6;display:grid;grid-template-columns:repeat(3,1fr);padding:9px;gap:2px;flex:none;box-shadow:0 4px 0 #b9ad95}
+.die i{width:12px;height:12px;border-radius:50%;justify-self:center;align-self:center;background:transparent}
+.die i.on{background:#1b2633}
+.die.rolling{animation:shake .12s linear infinite}
+@keyframes shake{25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+.dirs{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
+.dir{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;background:var(--surface2);text-align:left;font-weight:700}
+.sw{width:16px;height:16px;border-radius:4px;flex:none}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat{padding:12px 10px;border-radius:12px;font-weight:700;text-align:left}
+.scores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.score{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;border-radius:12px;font-size:.78rem;color:var(--muted);min-width:0}
+.score.cur{background:var(--surface2);color:var(--ink)}
+.score .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.score svg{width:40px;height:40px}
+
+/* Question sheet */
+.veil{position:fixed;inset:0;background:rgba(5,12,20,.72);display:flex;align-items:flex-end;justify-content:center;z-index:20;
+  padding-left:max(12px, env(safe-area-inset-left, 0px));padding-right:max(12px, env(safe-area-inset-right, 0px));padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px))}
+.card{width:100%;max-width:500px;background:#f8f4ea;color:#17212b;border-radius:22px;overflow:hidden;animation:up .3s ease-out}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.card-head{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700;font-size:1.05rem}
+.card-head em{font-style:normal;font-size:.8rem;font-family:var(--body);opacity:.85}
+.card-body{padding:20px 18px 18px;display:flex;flex-direction:column;gap:16px}
+.q{font-family:var(--display);font-weight:700;font-size:1.4rem;line-height:1.25;margin:0;text-wrap:balance}
+.ans{background:#ebe3d0;border-radius:14px;padding:14px;font-size:1.15rem;font-weight:700}
+.ans small{display:block;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:#6b6352;margin-bottom:4px}
+.judge{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ok{background:#2f8f4e;color:#fff}.ko{background:#b23a48;color:#fff}
+.dark-btn{background:#17212b;color:#f8f4ea}
+.win .card-body{align-items:center;text-align:center}
+.win svg{width:150px;height:150px}
+/* TV / grand écran paysage : plateau à gauche, jeu à droite, tout grossi pour une lecture depuis le canapé */
+.tvhint{display:none}
+body.kbd button:focus,body.kbd input:focus{outline:4px solid var(--gold);outline-offset:3px}
+@media (min-width:900px) and (orientation:landscape){
+  body{font-size:clamp(12px,min(1.25vw,2.6vh),28px)}
+  .screen{max-width:none}
+  #setup{max-width:min(1200px,94vw);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-content:safe center;gap:1em 3vw;
+    grid-template-areas:"brand count" "btns names" "hint names" "rules names"}
+  #setup>.brand{grid-area:brand}#setup>:nth-child(2){grid-area:count}#names{grid-area:names}#setup>.tvhint{grid-area:hint}#setup>.rules{grid-area:rules}#setup>:last-child{grid-area:btns}
+  #setup .name-row input{padding:.5em .8em}#setup .chip{padding:.5em}#setup .btn{font-size:1.25em;padding:.6em 1em}
+  .brand h1{font-size:2.2em}
+  .tvhint{display:block;color:var(--gold);font-weight:700;margin:0}
+  #game{padding-block:5vh!important;padding-inline:2.5vw;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);grid-template-rows:auto minmax(0,1fr) auto;
+    grid-template-areas:"board top" "board tray" "board scores";gap:1.2em 3vw;padding-block:4vh}
+  .topbar{grid-area:top}.board-wrap{grid-area:board}.tray{grid-area:tray;align-self:center;padding:1.2em;gap:1em;max-height:100%;overflow:auto}.scores{grid-area:scores}
+  .turn strong{font-size:2.3em}.turn span{font-size:1em}.pawn{width:1.8em;height:1.8em;font-size:.9em}
+  .menu{font-size:.85em}.sync{font-size:.8em}
+  .msg{font-size:1.35em}
+  .btn{font-size:1.5em;padding:.75em 1em}
+  .die{width:5.5em;height:5.5em;padding:.8em;border-radius:.9em}.die i{width:1em;height:1em}
+  .dir{font-size:1.3em;padding:.8em 1em}.sw{width:1em;height:1em}
+  .cat{font-size:1.2em;padding:.8em}
+  .score{font-size:1.05em;padding:.35em;flex-direction:row;justify-content:center;gap:.5em}.score svg{width:2.8em;height:2.8em;flex:none}
+  .score .nm{font-weight:700}
+  .veil{align-items:center}
+  .card{max-width:min(1150px,82vw)}
+  .card-head{font-size:1.6em;padding:.7em 1.1em}.card-head em{font-size:.7em}
+  .card-body{padding:1.8em;gap:1.3em}
+  .card{max-height:96vh;overflow:auto}
+  .q{font-size:2.5em}.ans{font-size:1.9em;padding:.7em .9em}.ans small{font-size:.45em}
+  .judge .btn,.card .btn{font-size:1.6em}
+  .win svg{width:12em;height:12em}
+}
+/* QR code manettes */
+.qrbox{display:flex;gap:14px;align-items:center;background:var(--surface);border:2px solid var(--line);border-radius:16px;padding:12px}
+.qrbox p{margin:4px 0 0;color:var(--muted);font-size:.9rem;line-height:1.4}
+.qrbox .qrcode-txt{color:var(--ink)}.qrbox b{color:var(--gold);letter-spacing:.12em}
+.qrimg{background:#fff;border-radius:10px;padding:6px;flex:none;width:110px;height:110px;box-sizing:border-box}
+.qrimg svg{width:100%;height:100%;display:block}
+.qrimg.big{width:min(320px,70vw);height:min(320px,70vw);padding:12px}
+.qrveil{z-index:30}
+@media (min-width:900px) and (orientation:landscape){
+  #setup{grid-template-areas:"brand count" "btns names" "qr names" "hint names" "rules names"}
+  #qrbox{grid-area:qr}.qrimg{width:8em;height:8em}.qrbox p{font-size:.95em}
+  .qrimg.big{width:min(42vh,26em);height:min(42vh,26em)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="setup" class="screen">
+  <div class="brand">
+    <svg width="64" height="64" viewBox="-50 -50 100 100" aria-hidden="true" id="logo"></svg>
+    <div><h1>Les Camemberts</h1><p>Quiz de culture générale, 6 thèmes</p></div>
+  </div>
+  <div class="names">
+    <span class="label">Nombre de joueurs</span>
+    <div class="chips" id="count"></div>
+  </div>
+  <div class="names" id="names"></div>
+  <p class="tvhint">Télécommande : flèches pour se déplacer, OK pour valider.</p>
+  <p class="rules">Lancez le dé, choisissez votre sens, répondez à voix haute. Les autres jugent la réponse. Une bonne réponse sur une grande case rapporte le camembert de sa couleur. Avec les 6, une question finale choisie par les adversaires décide de la victoire.</p>
+  <div class="qrbox" id="qrbox" hidden><div class="qrimg" id="qrimg"></div><div><span class="label">Jouer depuis son téléphone</span><p>Scannez ce code pour piloter la partie depuis votre téléphone (même Wi-Fi conseillé).</p><p class="qrcode-txt">Code <b id="qrcode"></b> · <span id="qrcount">aucun téléphone connecté</span></p></div></div>
+  <div class="names">
+    <button class="btn btn-main" id="resume" hidden>Reprendre la partie</button>
+    <button class="btn btn-ghost" id="start">Nouvelle partie</button>
+    <button class="btn btn-ghost fsb" hidden>Plein écran</button>
+  </div>
+</div>
+
+<div id="game" class="screen" hidden>
+  <div class="topbar">
+    <div class="turn"><div class="pawn" id="tpawn"></div><div style="min-width:0"><span>Au tour de</span><br><strong id="tname"></strong></div></div>
+    <div class="row" style="gap:8px;flex:none"><span class="sync" id="sync"></span><button class="menu" id="qrbtn" hidden>📱 <span id="qrn">0</span></button><button class="menu fsb" hidden>Plein écran</button><button class="menu" id="menu">Nouvelle partie</button></div>
+  </div>
+  <div class="board-wrap"><svg id="board" viewBox="0 0 400 400" role="img" aria-label="Plateau de jeu"></svg></div>
+  <div class="tray" id="tray"></div>
+  <div class="scores" id="scores"></div>
+</div>
+
+<div class="veil" id="veil" hidden></div>
+<div class="veil qrveil" id="qrveil" hidden><div class="card"><div class="card-head" style="background:var(--gold);color:#1d1600"><span>Rejoindre avec un téléphone</span><em id="qrcode2"></em></div><div class="card-body" style="align-items:center;text-align:center"><div class="qrimg big" id="qrimg2"></div><p style="margin:0">Scannez pour piloter la partie depuis votre téléphone.</p><button class="btn dark-btn" id="qrclose" style="width:100%">Fermer</button></div></div></div>
+
+<script>
+const CATS=[
+ {id:'geo',name:'Géographie',color:'#2f7fd8',ink:'#fff'},
+ {id:'div',name:'Divertissement',color:'#e05a9b',ink:'#fff'},
+ {id:'his',name:'Histoire',color:'#f2c230',ink:'#2a2000'},
+ {id:'art',name:'Arts & Littérature',color:'#9a6234',ink:'#fff'},
+ {id:'sci',name:'Sciences & Nature',color:'#36a457',ink:'#fff'},
+ {id:'spo',name:'Sports & Loisirs',color:'#f08a24',ink:'#2a1400'}
+];
+const PCOL=['#f5efe2','#b79cff','#4fd1c5','#ff8a7a'];
+const Q={"geo": [["Quelle est la capitale du Kazakhstan ?", "Astana"], ["Quel fleuve traverse Vienne, Budapest et Belgrade ?", "Le Danube"], ["Quel est le point culminant des Pyrénées ?", "Le pic d'Aneto (3 404 m)"], ["Quel pays compte le plus de fuseaux horaires, territoires d'outre-mer compris ?", "La France (12)"], ["Quelle est la capitale de la Nouvelle-Zélande ?", "Wellington"], ["Quel pays est entièrement enclavé dans l'Afrique du Sud ?", "Le Lesotho"], ["Quel détroit sépare l'Asie de l'Amérique ?", "Le détroit de Béring"], ["Quelle est la capitale de la Birmanie (Myanmar) ?", "Naypyidaw"], ["Quel est le lac le plus profond du monde ?", "Le lac Baïkal"], ["Quel est le plus long fleuve d'Europe ?", "La Volga"], ["Dans quel pays se trouve le désert d'Atacama ?", "Le Chili"], ["Quelle grande ville est traversée par le Bosphore ?", "Istanbul"], ["Quel État américain a pour capitale Sacramento ?", "La Californie"], ["Quelle est la capitale du Maroc ?", "Rabat"], ["Quel lac salé, frontalier de la Jordanie, est le point le plus bas des terres émergées ?", "La mer Morte"], ["De quel département Laon est-elle la préfecture ?", "L'Aisne"], ["Quel est le plus haut volcan actif d'Europe ?", "L'Etna"], ["Quelle est la capitale constitutionnelle de la Bolivie ?", "Sucre (La Paz est le siège du gouvernement)"], ["Quelle île française de l'océan Indien a pour chef-lieu Mamoudzou ?", "Mayotte"], ["Quel pays possède la plus longue côte du monde ?", "Le Canada"], ["Dans quel pays se trouve le delta du Mékong ?", "Le Vietnam"], ["Dans quel massif se trouve le puy de Sancy ?", "Le Massif central (monts Dore)"], ["Quelle ville est la capitale de la Wallonie ?", "Namur"], ["Quel pays est traversé à la fois par l'équateur et le tropique du Capricorne ?", "Le Brésil"], ["Quel archipel portugais a pour principale ville Ponta Delgada ?", "Les Açores"], ["Quelle est la capitale de l'Islande ?", "Reykjavik"], ["Quel fleuve marque la frontière entre le Texas et le Mexique ?", "Le Rio Grande"], ["Quelle chaîne de montagnes marque la limite entre l'Europe et l'Asie en Russie ?", "L'Oural"], ["Quelle est la capitale de la Slovénie ?", "Ljubljana"], ["Dans quel pays se trouve le mont Elbrouz, plus haut sommet du Caucase ?", "La Russie"]], "div": [["Qui a réalisé « Le Fabuleux Destin d'Amélie Poulain » ?", "Jean-Pierre Jeunet"], ["Dans « Pulp Fiction », quel acteur joue Vincent Vega ?", "John Travolta"], ["Quel film de Bong Joon-ho a remporté l'Oscar du meilleur film en 2020 ?", "Parasite"], ["Quel compositeur a signé les musiques de « Star Wars » et des « Dents de la mer » ?", "John Williams"], ["Qui a créé la série « Kaamelott » et y joue le roi Arthur ?", "Alexandre Astier"], ["Quel groupe a sorti l'album « The Dark Side of the Moon » en 1973 ?", "Pink Floyd"], ["Quel est le vrai nom de Freddie Mercury ?", "Farrokh Bulsara"], ["Quel film d'Orson Welles (1941) tourne autour du mot « Rosebud » ?", "Citizen Kane"], ["Quel chanteur belge a écrit « Ne me quitte pas » ?", "Jacques Brel"], ["Dans quel film de Stanley Kubrick apparaît l'ordinateur HAL 9000 ?", "2001, l'Odyssée de l'espace"], ["Quelle série suit Walter White, professeur de chimie devenu fabricant de drogue ?", "Breaking Bad"], ["Quel acteur français a remporté l'Oscar du meilleur acteur pour « The Artist » ?", "Jean Dujardin"], ["Comment s'appelle la station spatiale détruite à la fin du premier « Star Wars » ?", "L'Étoile de la mort"], ["Quel réalisateur japonais a signé « Le Voyage de Chihiro » ?", "Hayao Miyazaki"], ["Dans « Le Parrain » (1972), quel acteur joue Vito Corleone ?", "Marlon Brando"], ["Quelle chanteuse britannique a sorti l'album « 21 » en 2011 ?", "Adele"], ["De quelle troupe de théâtre venaient les acteurs des « Bronzés » ?", "Le Splendid"], ["Quelle console de jeux Sony est sortie au Japon en 1994 ?", "La PlayStation"], ["Dans « Matrix », de quelle couleur est la pilule que choisit Neo ?", "Rouge"], ["Quel groupe de rock irlandais a pour chanteur Bono ?", "U2"], ["Quel film de Christopher Nolan se déroule en grande partie dans des rêves ?", "Inception"], ["Quelle actrice, alors enfant, joue Mathilda dans « Léon » de Luc Besson ?", "Natalie Portman"], ["Comment s'appelle le majordome de Batman ?", "Alfred (Pennyworth)"], ["Quel jeu vidéo à base de blocs a été créé par le Suédois Markus « Notch » Persson ?", "Minecraft"], ["Dans quel film d'Alfred Hitchcock se trouve la célèbre scène de la douche ?", "Psychose"], ["Quelle série Netflix met en scène Assane Diop, gentleman cambrioleur joué par Omar Sy ?", "Lupin"], ["Qui a composé l'opéra-rock « Starmania » avec Luc Plamondon ?", "Michel Berger"], ["Combien d'Oscars a remporté « Le Seigneur des anneaux : Le Retour du roi » ?", "11"], ["Dans « Friends », quel est le métier de Ross ?", "Paléontologue"], ["Quel compositeur a écrit la musique d'« Amélie Poulain » ?", "Yann Tiersen"]], "his": [["En quelle année l'édit de Nantes a-t-il été signé ?", "1598"], ["Quel roi de France était surnommé « le Bien-Aimé » ?", "Louis XV"], ["Quelle bataille de 1515 est associée à François Ier ?", "Marignan"], ["En quelle année Constantinople est-elle tombée aux mains des Ottomans ?", "1453"], ["Quel chancelier a mené l'unification allemande de 1871 ?", "Otto von Bismarck"], ["Quel traité a créé la Communauté économique européenne en 1957 ?", "Le traité de Rome"], ["Quelle guerre a opposé la France et l'Angleterre de 1337 à 1453 ?", "La guerre de Cent Ans"], ["Quel pharaon a vu son tombeau découvert presque intact par Howard Carter en 1922 ?", "Toutânkhamon"], ["En quelle année la IIIe République a-t-elle été proclamée ?", "1870"], ["Quelle reine de France était surnommée « l'Autrichienne » ?", "Marie-Antoinette"], ["Quelle crise a opposé les États-Unis et l'URSS en octobre 1962 ?", "La crise des missiles de Cuba"], ["Quel navigateur portugais a atteint les Indes par la mer en 1498 ?", "Vasco de Gama"], ["Qui a fondé l'Empire mongol ?", "Gengis Khan"], ["En quelle année les accords d'Évian ont-ils mis fin à la guerre d'Algérie ?", "1962"], ["Quel empereur romain a autorisé le christianisme par l'édit de Milan en 313 ?", "Constantin"], ["Quelle dynastie a précédé les Capétiens sur le trône de France ?", "Les Carolingiens"], ["En quelle année Hugues Capet est-il devenu roi ?", "987"], ["Qui fut le premier président de la République française, élu en 1848 ?", "Louis-Napoléon Bonaparte"], ["Quelle bataille de 1916 a duré près de dix mois dans la Meuse ?", "Verdun"], ["Quel massacre de protestants a eu lieu à Paris en août 1572 ?", "La Saint-Barthélemy"], ["Qui dirigeait l'URSS pendant la Seconde Guerre mondiale ?", "Joseph Staline"], ["En quelle année Nelson Mandela est-il devenu président de l'Afrique du Sud ?", "1994"], ["Quelle cité grecque a affronté Athènes pendant la guerre du Péloponnèse ?", "Sparte"], ["Quel roi d'Angleterre a rompu avec Rome et fondé l'Église anglicane ?", "Henri VIII"], ["Quel ministre de Louis XIV a mené une politique mercantiliste et créé des manufactures royales ?", "Jean-Baptiste Colbert"], ["Dans quelle ville siégeait le gouvernement de Pétain de 1940 à 1944 ?", "Vichy"], ["En quelle année a eu lieu le krach boursier de Wall Street ?", "1929"], ["Quel roi des Francs a été baptisé à Reims vers 496 ?", "Clovis"], ["Quel général carthaginois a franchi les Alpes avec des éléphants ?", "Hannibal"], ["En quelle année a été votée la loi de séparation des Églises et de l'État ?", "1905"]], "art": [["Qui a écrit « À la recherche du temps perdu » ?", "Marcel Proust"], ["Quel peintre a réalisé « Le Radeau de la Méduse » ?", "Théodore Géricault"], ["Qui a écrit « Cent ans de solitude » ?", "Gabriel García Márquez"], ["Quel compositeur a écrit l'opéra « Carmen » ?", "Georges Bizet"], ["Dans quel musée est exposée « La Nuit étoilée » de Van Gogh ?", "Le MoMA, à New York"], ["Qui a écrit « Les Fleurs du mal » ?", "Charles Baudelaire"], ["Qui a peint « La Liberté guidant le peuple » ?", "Eugène Delacroix"], ["Qui est l'auteur de « Voyage au bout de la nuit » ?", "Louis-Ferdinand Céline"], ["Quel artiste a exposé en 1917 un urinoir intitulé « Fontaine » ?", "Marcel Duchamp"], ["Qui a écrit « Le Rouge et le Noir » ?", "Stendhal"], ["Quel architecte a conçu la Cité radieuse de Marseille ?", "Le Corbusier"], ["Quel écrivain russe a écrit « Crime et Châtiment » ?", "Fiodor Dostoïevski"], ["Qui a peint « La Jeune Fille à la perle » ?", "Johannes Vermeer"], ["Qui a écrit « Les Liaisons dangereuses » ?", "Choderlos de Laclos"], ["Quel compositeur polonais, installé à Paris, a écrit de nombreuses polonaises et mazurkas ?", "Frédéric Chopin"], ["Qui a peint « Le Déjeuner sur l'herbe » (1863) ?", "Édouard Manet"], ["Quel écrivain a refusé le prix Nobel de littérature en 1964 ?", "Jean-Paul Sartre"], ["Quel dramaturge a écrit « Cyrano de Bergerac » ?", "Edmond Rostand"], ["Quel peintre de la Renaissance a peint « La Naissance de Vénus » ?", "Sandro Botticelli"], ["Qui a écrit « Le Comte de Monte-Cristo » ?", "Alexandre Dumas"], ["Quel mouvement artistique André Breton a-t-il lancé par un manifeste en 1924 ?", "Le surréalisme"], ["Qui a composé « Le Boléro » ?", "Maurice Ravel"], ["Quelle poétesse grecque de l'Antiquité vivait sur l'île de Lesbos ?", "Sappho"], ["Qui a peint « Les Ménines » ?", "Diego Velázquez"], ["Qui a écrit « Bel-Ami » ?", "Guy de Maupassant"], ["Quel auteur a écrit « Le Seigneur des anneaux » ?", "J. R. R. Tolkien"], ["Dans quelle ville se trouve la galerie des Offices ?", "Florence"], ["Quel peintre a peint la série des « Nymphéas » dans son jardin de Giverny ?", "Claude Monet"], ["Qui a écrit la tragédie « Phèdre » (1677) ?", "Jean Racine"], ["Quel compositeur allemand a écrit le cycle « L'Anneau du Nibelung » ?", "Richard Wagner"]], "sci": [["Quel est le symbole chimique du potassium ?", "K"], ["Quel est le numéro atomique du carbone ?", "6"], ["Autour de quelle planète tourne Ganymède, la plus grande lune du système solaire ?", "Jupiter"], ["Quel chimiste russe a établi le tableau périodique des éléments ?", "Dmitri Mendeleïev"], ["Quel est le gaz le plus abondant dans l'atmosphère terrestre ?", "L'azote (environ 78 %)"], ["Combien de dents compte un adulte, dents de sagesse comprises ?", "32"], ["Quel organite de la cellule produit l'essentiel de son énergie ?", "La mitochondrie"], ["Quelle est l'unité de mesure de la fréquence ?", "Le hertz"], ["Qui a découvert les rayons X en 1895 ?", "Wilhelm Röntgen"], ["Quel est l'os le plus long du corps humain ?", "Le fémur"], ["Quel est le pH de l'eau pure à 25 °C ?", "7"], ["Quelle planète tourne « couchée », avec un axe incliné d'environ 98° ?", "Uranus"], ["Quel savant a mis au point le premier vaccin contre la rage ?", "Louis Pasteur"], ["Comment appelle-t-on la constante 6,022 × 10²³ par mole ?", "Le nombre d'Avogadro"], ["Quel est le plus petit os du corps humain ?", "L'étrier (dans l'oreille)"], ["Quel groupe sanguin est dit « donneur universel » ?", "O négatif"], ["Qui a publié « L'Origine des espèces » en 1859 ?", "Charles Darwin"], ["Quelle est la température du zéro absolu en degrés Celsius ?", "−273,15 °C"], ["Quel est le seul mammifère capable de voler activement ?", "La chauve-souris"], ["Quelle est la formule chimique du sel de table ?", "NaCl"], ["Combien de paires de côtes possède un être humain ?", "12"], ["Quelle vitamine la peau fabrique-t-elle sous l'effet du soleil ?", "La vitamine D"], ["Dans quelle couche de l'atmosphère se trouve la couche d'ozone ?", "La stratosphère"], ["Quel est l'élément le plus abondant de l'Univers ?", "L'hydrogène"], ["Avec Francis Crick, qui a décrit la double hélice de l'ADN en 1953 ?", "James Watson"], ["Quel insecte transmet le paludisme ?", "Le moustique anophèle (la femelle)"], ["Quelle loi s'écrit U = R × I ?", "La loi d'Ohm"], ["Quelle est la grande galaxie spirale la plus proche de la Voie lactée ?", "Andromède"], ["Combien de chambres compte le cœur humain ?", "4 (2 oreillettes, 2 ventricules)"], ["Quel scientifique a donné son nom à l'unité de puissance ?", "James Watt"]], "spo": [["En quelle année la France a-t-elle remporté sa première Coupe du monde de football ?", "1998"], ["Quel nageur américain détient le record de médailles d'or olympiques ?", "Michael Phelps (23)"], ["Combien de joueurs par équipe sont sur le terrain au volley-ball ?", "6"], ["Dans quelle ville se sont tenus les premiers Jeux olympiques modernes en 1896 ?", "Athènes"], ["Qui a rénové les Jeux olympiques à la fin du XIXe siècle ?", "Pierre de Coubertin"], ["Quel coureur français, surnommé « le Blaireau », a gagné 5 Tours de France ?", "Bernard Hinault"], ["Au tennis, comment appelle-t-on la victoire dans les quatre tournois majeurs la même année ?", "Le Grand Chelem"], ["Quelle est la distance officielle d'un marathon ?", "42,195 km"], ["Dans quel sport se dispute le Tournoi des Six Nations ?", "Le rugby"], ["Quel club a remporté le plus de Ligues des champions de football ?", "Le Real Madrid"], ["À quelle hauteur se trouve un panier de basket ?", "3,05 m"], ["Quel pilote allemand a remporté 7 titres de champion du monde de Formule 1 ?", "Michael Schumacher"], ["Dans quel sport marque-t-on un « ippon » ou un « waza-ari » ?", "Le judo"], ["Combien de temps dure un round en boxe anglaise professionnelle ?", "3 minutes"], ["Dans quel ordre s'enchaînent les épreuves d'un triathlon ?", "Natation, vélo, course à pied"], ["Combien de joueurs compte une équipe de cricket ?", "11"], ["Aux échecs, comment s'appelle le coup qui déplace le roi et une tour en même temps ?", "Le roque"], ["Au tarot, combien y a-t-il d'atouts, sans compter l'Excuse ?", "21"], ["Quelle épreuve d'athlétisme regroupe 10 disciplines sur deux jours ?", "Le décathlon"], ["Dans quel pays se trouve le circuit de Spa-Francorchamps ?", "La Belgique"], ["Au golf, comment appelle-t-on un trou joué en deux coups de moins que le par ?", "Un eagle"], ["Quel basketteur des Chicago Bulls a rendu célèbre le numéro 23 ?", "Michael Jordan"], ["Quel tournoi du Grand Chelem se joue sur gazon à Londres ?", "Wimbledon"], ["Combien de jetons contient un jeu de Scrabble en français ?", "102"], ["Quel skieur français a remporté trois titres olympiques aux Jeux de Grenoble en 1968 ?", "Jean-Claude Killy"], ["Dans quel sport se dispute la Ryder Cup ?", "Le golf"], ["Combien de cases compte le parcours du jeu de l'oie classique ?", "63"], ["Combien de points vaut une transformation au rugby à XV ?", "2"], ["Quelle course cycliste italienne attribue un maillot rose à son leader ?", "Le Tour d'Italie (Giro)"], ["Quelle nation a remporté le plus de Coupes du monde de rugby ?", "L'Afrique du Sud (4)"]]};
+
+const N=36, KEY='camemberts-v1';
+let S=null, nPlayers=4, rolling=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function sq(i){const k=Math.floor(i/6),m=i%6;if(m===0)return{type:'hq',cat:k};if(m===3)return{type:'again'};return{type:'n',cat:(k+m)%6};}
+/* Sauvegarde : stockage en ligne privé (par compte) + copie locale de secours */
+let remote=null,saved=null,writing=false,dirty=false;
+function localGet(){try{const v=JSON.parse(localStorage.getItem(KEY)||'null');return v&&v.state?v:null}catch(e){return null}}
+function setSync(t,bad){const el=$('sync');if(el){el.textContent=t;el.classList.toggle('bad',!!bad)}}
+function save(){const rec=S?{state:JSON.stringify(S),savedAt:Date.now()}:null;saved=rec;
+  try{rec?localStorage.setItem(KEY,JSON.stringify(rec)):localStorage.removeItem(KEY)}catch(e){}
+  dirty=true;flush();}
+async function flush(){if(!remote){setSync('Sauvegarde locale');return}if(writing)return;writing=true;
+  while(dirty){dirty=false;const rec=saved;setSync('Sauvegarde…');
+    try{rec?await remote.set(rec):await remote.delete();setSync('Sauvegardé')}
+    catch(e){setSync('Échec de sauvegarde',true);if(e&&e.code==='unavailable'){await new Promise(r=>setTimeout(r,800+Math.random()*800));dirty=true}else break}}
+  writing=false;}
+function clearSave(){S=null;save();}
+function showResume(){const b=$('resume');if(!b)return;const ok=!!(saved&&JSON.parse(saved.state).phase!=='win');b.hidden=!ok;
+  if(ok){const st=JSON.parse(saved.state);b.textContent=`Reprendre la partie (${st.players.map(p=>p.name).join(', ')})`;}}
+async function initStore(){
+  saved=localGet();
+  try{const use=window.claude&&window.claude.use;if(!use)return;
+    const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    if(!db||!user)return;const id=await user.id();if(!id)return;
+    remote=db.doc('data/users/'+id+'/game');const snap=await remote.get();
+    if(snap.exists){const d=snap.data();if(d&&d.state&&(!saved||(d.savedAt||0)>=(saved.savedAt||0)))saved={state:d.state,savedAt:d.savedAt||0};}
+    else if(saved){dirty=true;flush();}
+    setSync('Sauvegardé');
+  }catch(e){remote=null}
+  finally{if(!S){showResume();focusMain();}}
+}
+
+/* geometry */
+const P=(r,a)=>{const t=a*Math.PI/180;return[(200+r*Math.cos(t)).toFixed(2),(200+r*Math.sin(t)).toFixed(2)]};
+function sector(r0,r1,a0,a1){const[a,b]=P(r1,a0),[c,d]=P(r1,a1),[e,f]=P(r0,a1),[g,h]=P(r0,a0);
+  return `M${a} ${b}A${r1} ${r1} 0 0 1 ${c} ${d}L${e} ${f}A${r0} ${r0} 0 0 0 ${g} ${h}Z`;}
+function wedge(r,k){const a0=-90+k*60,a1=a0+60,t0=a0*Math.PI/180,t1=a1*Math.PI/180;
+  return `M0 0L${(r*Math.cos(t0)).toFixed(2)} ${(r*Math.sin(t0)).toFixed(2)}A${r} ${r} 0 0 1 ${(r*Math.cos(t1)).toFixed(2)} ${(r*Math.sin(t1)).toFixed(2)}Z`;}
+function pie(w,r=46){let s=`<circle r="${r+2}" fill="#0b1724" stroke="#3a5978" stroke-width="2"/>`;
+  for(let k=0;k<6;k++)s+=`<path d="${wedge(r,k)}" fill="${w[k]?CATS[k].color:'#203a55'}" stroke="#0b1724" stroke-width="2.5"/>`;return s;}
+const pieSvg=(w)=>`<svg viewBox="-50 -50 100 100" aria-hidden="true">${pie(w)}</svg>`;
+const ang=i=>-90+i*10+5;
+
+function buildBoard(){
+  let h=`<circle cx="200" cy="200" r="199" fill="#0a1622"/>`;
+  for(let i=0;i<N;i++){const s=sq(i),a0=-90+i*10+.7,a1=-90+(i+1)*10-.7;
+    const fill=s.type==='again'?'#2b4866':CATS[s.cat].color;
+    h+=`<path class="sq" data-i="${i}" d="${sector(s.type==='hq'?120:130,s.type==='hq'?197:186,a0,a1)}" fill="${fill}"/>`;
+    if(s.type==='again'){const[x,y]=P(158,ang(i));h+=`<text x="${x}" y="${y}" fill="#cfe0f0" font-size="15" font-weight="700" text-anchor="middle" dominant-baseline="central" pointer-events="none">↻</text>`;}
+    if(s.type==='hq'){const[x,y]=P(160,ang(i));h+=`<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="#fff" stroke-width="2.5" pointer-events="none"/><circle cx="${x}" cy="${y}" r="3" fill="#fff" pointer-events="none"/>`;}
+  }
+  h+=`<circle cx="200" cy="200" r="112" fill="#132538" stroke="#2b4866" stroke-width="2"/>`;
+  h+=`<g id="hub" transform="translate(200 190)"></g><text id="hubname" x="200" y="270" text-anchor="middle" fill="#eef3f8" font-family="Bricolage Grotesque, system-ui, sans-serif" font-weight="700" font-size="17"></text>`;
+  h+=`<g id="tokens"></g>`;
+  $('board').innerHTML=h;
+  $('board').addEventListener('click',e=>{const t=e.target.closest('.sq.target');if(t)choose(+t.dataset.i)});
+}
+function drawTokens(){
+  const by={};S.players.forEach((p,k)=>{(by[p.pos]=by[p.pos]||[]).push(k)});
+  let h='';const offs=[[0,0],[-14,0],[14,0],[0,-14]];
+  S.players.forEach((p,k)=>{const grp=by[p.pos],j=grp.indexOf(k),n=grp.length;
+    const r=158+(n>1?[-13,13,-13,13][j]:0),a=ang(p.pos)+(n>2?(j<2?-2.6:2.6):0);const[x,y]=P(r,a);
+    h+=`<g class="token" style="transform:translate(${x}px,${y}px)"><circle r="11" fill="${PCOL[k]}" stroke="#0a1622" stroke-width="3"/><text text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="700" fill="#10202f">${k+1}</text></g>`;});
+  $('tokens').innerHTML=h;
+}
+
+/* setup */
+function renderSetup(){
+  $('logo').innerHTML=pie([1,1,1,1,1,1]);
+  $('count').innerHTML=[2,3,4].map(n=>`<button class="chip" aria-pressed="${n===nPlayers}" data-n="${n}">${n} joueurs</button>`).join('');
+  const old=[...document.querySelectorAll('#names input')].map(i=>i.value);
+  let h='<span class="label">Prénoms</span>';
+  for(let k=0;k<nPlayers;k++)h+=`<div class="name-row"><div class="pawn" style="background:${PCOL[k]}">${k+1}</div><input id="pn${k}" maxlength="14" placeholder="Joueur ${k+1}" value="${esc(old[k]||'')}" autocomplete="off"></div>`;
+  $('names').innerHTML=h;
+  showResume();
+}
+$('count').addEventListener('click',e=>{const b=e.target.closest('[data-n]');if(b){nPlayers=+b.dataset.n;renderSetup();}});
+$('start').onclick=()=>{
+  const players=[];for(let k=0;k<nPlayers;k++){const v=$('pn'+k).value.trim();players.push({name:v||`Joueur ${k+1}`,pos:0,wedges:[0,0,0,0,0,0]});}
+  S={players,cur:0,phase:'roll',roll:null,options:[],q:null,used:{},msg:`${players[0].name} commence. Lancez le dé.`};
+  enterGame();
+};
+$('resume').onclick=()=>{if(!saved)return;try{S=JSON.parse(saved.state)}catch(e){S=null}if(S)enterGame();};
+function enterGame(){$('setup').hidden=true;$('game').hidden=false;buildBoard();render();
+  try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
+
+/* game logic */
+const cur=()=>S.players[S.cur];
+const allW=p=>p.wedges.every(Boolean);
+function startTurn(){S.phase=allW(cur())?'final':'roll';S.roll=null;S.options=[];}
+function rollDie(){
+  if(S.phase!=='roll'||rolling)return;rolling=true;const d=document.querySelector('.die');d&&d.classList.add('rolling');
+  let t=0;const iv=setInterval(()=>{paintDie(1+Math.floor(Math.random()*6));if(++t>8){clearInterval(iv);rolling=false;
+    const n=1+Math.floor(Math.random()*6),p=cur().pos;S.roll=n;
+    S.options=[...new Set([(p+n)%N,(p-n+N)%N])];S.phase='choose';S.msg='';render();}},70);
+}
+function choose(i){if(S.phase!=='choose'||!S.options.includes(i))return;
+  cur().pos=i;const s=sq(i);
+  if(s.type==='again'){S.msg='Case Rejouer : relancez le dé.';S.phase='roll';S.roll=null;render();return;}
+  ask(s.cat,s.type==='hq',false);}
+function ask(cat,hq,final){const id=CATS[cat].id,list=Q[id];let used=S.used[id]||[];if(used.length>=list.length)used=[];
+  const free=list.map((_,i)=>i).filter(i=>!used.includes(i)),idx=free[Math.floor(Math.random()*free.length)];
+  used.push(idx);S.used[id]=used;S.q={cat,idx,hq,final,shown:false};S.phase='question';render();}
+function judge(ok){const q=S.q,p=cur(),c=CATS[q.cat];
+  if(q.final){if(ok){S.phase='win';S.q=null;render();return;}
+    S.msg=`Raté pour ${p.name}. Il faudra retenter la question finale au prochain tour.`;return nextPlayer();}
+  if(ok){let m='Bonne réponse !';
+    if(q.hq&&!p.wedges[q.cat]){p.wedges[q.cat]=1;m=`Camembert ${c.name} gagné !`;}
+    S.q=null;startTurn();S.msg=S.phase==='final'?`${m} ${p.name} a les 6 camemberts : place à la question finale.`:`${m} ${p.name} rejoue.`;render();}
+  else{S.msg=`Raté. La réponse était : ${Q[c.id][q.idx][1]}.`;nextPlayer();}}
+function nextPlayer(){S.q=null;S.cur=(S.cur+1)%S.players.length;startTurn();
+  S.msg=(S.msg?S.msg+' ':'')+(S.phase==='final'?`${cur().name} tente la question finale.`:`À ${cur().name} de lancer.`);render();}
+
+/* render */
+const PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function dieHtml(n){return `<div class="die" aria-label="${n?'Dé : '+n:'Dé'}">${[...Array(9)].map((_,i)=>`<i class="${n&&PIPS[n].includes(i)?'on':''}"></i>`).join('')}</div>`;}
+function paintDie(n){const d=document.querySelector('.die');if(d)d.querySelectorAll('i').forEach((el,i)=>el.className=PIPS[n].includes(i)?'on':'');}
+function label(i){const s=sq(i);if(s.type==='again')return{c:'#2b4866',t:'Rejouer'};return{c:CATS[s.cat].color,t:CATS[s.cat].name+(s.type==='hq'?' · camembert':'')};}
+function render(){
+  const p=cur();$('tpawn').style.background=PCOL[S.cur];$('tpawn').textContent=S.cur+1;$('tname').textContent=p.name;
+  $('hub').innerHTML=`<g transform="scale(1.25)">${pie(p.wedges,46)}</g>`;$('hubname').textContent=p.name;
+  drawTokens();
+  const b=$('board');b.classList.toggle('choosing',S.phase==='choose');
+  b.querySelectorAll('.sq').forEach(el=>el.classList.toggle('target',S.phase==='choose'&&S.options.includes(+el.dataset.i)));
+  let t=`<p class="msg">${esc(S.msg||'')}</p>`;
+  if(S.phase==='roll')t+=`<div class="row">${dieHtml(S.roll)}<button class="btn btn-main" style="flex:1" id="rollb">Lancer le dé</button></div>`;
+  if(S.phase==='choose')t+=`<div class="row" style="align-items:flex-start">${dieHtml(S.roll)}<div class="dirs">${S.options.map((i,j)=>{const l=label(i);return `<button class="dir" data-go="${i}"><span class="sw" style="background:${l.c}"></span><span>${S.options.length>1?(j?'↺ ':'↻ '):''}${esc(l.t)}</span></button>`}).join('')}</div></div>`;
+  if(S.phase==='final')t+=`<p class="msg" style="margin-top:-6px"><b>Question finale.</b> Les adversaires de ${esc(p.name)} choisissent la catégorie :</p><div class="cats">${CATS.map((c,k)=>`<button class="cat" data-fc="${k}" style="background:${c.color};color:${c.ink}">${c.name}</button>`).join('')}</div>`;
+  if(S.phase==='question'||S.phase==='win')t+=`<div class="row">${dieHtml(S.roll)}<span style="color:var(--muted)">Question en cours…</span></div>`;
+  $('tray').innerHTML=t;
+  const rb=$('rollb');if(rb)rb.onclick=rollDie;
+  $('tray').querySelectorAll('[data-go]').forEach(x=>x.onclick=()=>choose(+x.dataset.go));
+  $('tray').querySelectorAll('[data-fc]').forEach(x=>x.onclick=()=>ask(+x.dataset.fc,false,true));
+  $('scores').style.gridTemplateColumns=`repeat(${S.players.length},minmax(0,1fr))`;
+  $('scores').innerHTML=S.players.map((q,k)=>`<div class="score${k===S.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm"><span class="pawn" style="display:inline-grid;width:12px;height:12px;border-width:1px;vertical-align:-1px;background:${PCOL[k]}"></span> ${esc(q.name)}</span></div>`).join('');
+  renderVeil();save();focusMain();
+}
+function renderVeil(){
+  const v=$('veil');
+  if(S.phase==='question'&&S.q){const c=CATS[S.q.cat],[q,a]=Q[c.id][S.q.idx];
+    const tag=S.q.final?'Question finale':S.q.hq?'Case camembert':'';
+    v.innerHTML=`<div class="card" role="dialog" aria-label="Question ${c.name}"><div class="card-head" style="background:${c.color};color:${c.ink}"><span>${c.name}</span><em>${tag}</em></div><div class="card-body">
+      <p class="q">${esc(q)}</p>
+      ${S.q.shown?`<div class="ans"><small>Réponse</small>${esc(a)}</div><div class="judge"><button class="btn ok" id="okb">Bonne réponse</button><button class="btn ko" id="kob">Raté</button></div>`
+      :`<button class="btn dark-btn" id="showb">Voir la réponse</button>`}</div></div>`;
+    v.hidden=false;
+    if($('showb'))$('showb').onclick=()=>{S.q.shown=true;renderVeil();save();focusMain();};
+    if($('okb')){$('okb').onclick=()=>judge(true);$('kob').onclick=()=>judge(false);}
+  }else if(S.phase==='win'){const p=cur();
+    v.innerHTML=`<div class="card win"><div class="card-head" style="background:var(--gold);color:#1d1600;justify-content:center"><span>Victoire</span></div><div class="card-body">
+      ${pieSvg(p.wedges)}<p class="q">${esc(p.name)} remporte la partie !</p><button class="btn dark-btn" id="againb" style="width:100%">Nouvelle partie</button></div></div>`;
+    v.hidden=false;$('againb').onclick=toSetup;
+  }else{v.hidden=true;v.innerHTML='';}
+}
+function toSetup(){clearSave();$('veil').hidden=true;$('game').hidden=true;$('setup').hidden=false;renderSetup();}
+let armT;$('menu').onclick=function(){
+  if(this.classList.contains('armed')){clearTimeout(armT);toSetup();this.classList.remove('armed');this.textContent='Nouvelle partie';return;}
+  this.classList.add('armed');this.textContent='Confirmer ?';armT=setTimeout(()=>{this.classList.remove('armed');this.textContent='Nouvelle partie'},3000);};
+
+
+/* Télécommande / clavier : navigation aux flèches + focus automatique sur l'action principale */
+const tvMQ=window.matchMedia('(min-width: 900px) and (orientation: landscape)');
+let kbd=false;
+const visible=el=>el.getClientRects().length>0&&!el.closest('[hidden]');
+function focusMain(){if(!(kbd||tvMQ.matches))return;
+  const a=document.activeElement;if(a&&a.tagName==='INPUT')return;
+  const sel=$('veil').hidden?['#rollb','[data-go]','[data-fc]','#resume','#start']:['#okb','#showb','#againb'];
+  for(const q of sel){const el=document.querySelector(q);if(el&&visible(el)){el.focus({preventScroll:true});return}}}
+document.addEventListener('keydown',e=>{
+  const D={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!D)return;
+  const a=document.activeElement;if(a&&a.tagName==='INPUT'&&D[1]===0)return;
+  if(!kbd){kbd=true;document.body.classList.add('kbd');}
+  const scope=$('veil').hidden?document:$('veil');
+  const items=[...scope.querySelectorAll('button,input')].filter(visible);
+  e.preventDefault();
+  if(!items.includes(a)){items[0]&&items[0].focus();return}
+  const r=a.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let best=null,bs=1e9;
+  for(const el of items){if(el===a)continue;const q=el.getBoundingClientRect(),x=q.left+q.width/2-cx,y=q.top+q.height/2-cy;
+    const along=x*D[0]+y*D[1];if(along<=4)continue;const sc=along+Math.abs(x*D[1]-y*D[0])*2.5;if(sc<bs){bs=sc;best=el}}
+  if(best)best.focus();
+});
+
+
+/* Plein écran (masque la barre du navigateur quand l'appareil l'autorise) */
+(function(){const el=document.documentElement,can=document.fullscreenEnabled&&el.requestFullscreen;
+  document.querySelectorAll('.fsb').forEach(b=>{b.hidden=!can;b.onclick=()=>{
+    if(document.fullscreenElement){document.exitFullscreen().catch(()=>{});return}
+    el.requestFullscreen().then(()=>setTimeout(focusMain,300)).catch(()=>{document.querySelectorAll('.fsb').forEach(x=>{x.textContent='Plein écran indisponible';x.disabled=true})});}});
+  document.addEventListener('fullscreenchange',()=>document.querySelectorAll('.fsb').forEach(b=>b.textContent=document.fullscreenElement?'Quitter le plein écran':'Plein écran'));})();
+
+renderSetup();initStore();focusMain();
+</script>
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script src="tv-link.js"></script>
+
+</body></html>

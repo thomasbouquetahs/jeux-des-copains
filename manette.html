@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e1c2a">
+<title>Les Camemberts · Manette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0e1c2a; --surface:#162a3e; --surface2:#1e3650; --line:#2b4866;
+  --ink:#eef3f8; --muted:#97adc2; --gold:#f2c230;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;
+  padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  -webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:1.25rem}
+.brand svg{width:34px;height:34px}
+.status{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.status i{width:8px;height:8px;border-radius:50%;background:#ff8a7a}
+.status.on i{background:#4fd18a}
+.label{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.panel{background:var(--surface);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.msg{margin:0;line-height:1.4}
+.muted{color:var(--muted)}
+.btn{padding:16px 18px;border-radius:14px;font-weight:700;font-family:var(--display);font-size:1.15rem;width:100%}
+.btn-main{background:var(--gold);color:#1d1600}
+.btn-ghost{background:var(--surface2);border:2px solid var(--line)}
+.btn-small{padding:9px 12px;border-radius:10px;font-size:.85rem;background:var(--surface);color:var(--muted);width:auto;font-family:var(--body)}
+.btn-small.armed{background:#7a2131;color:#fff}
+.chips{display:flex;gap:8px}
+.chip{flex:1;padding:12px;border-radius:12px;background:var(--surface2);border:2px solid var(--line);font-weight:700}
+.chip[aria-pressed="true"]{border-color:var(--gold)}
+.name-row{display:flex;align-items:center;gap:12px}
+.name-row input{flex:1;min-width:0;padding:13px 14px;border-radius:12px;border:2px solid var(--line);background:var(--surface2);color:var(--ink);font:inherit}
+.pawn{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:.8rem;font-weight:700;color:#10202f;border:2px solid rgba(255,255,255,.7)}
+.turn{display:flex;align-items:center;gap:12px}
+.turn strong{font-family:var(--display);font-size:1.5rem;display:block;line-height:1.1}
+.turn span{color:var(--muted);font-size:.85rem}
+.dir,.cat{display:flex;align-items:center;gap:10px;padding:15px 14px;border-radius:14px;background:var(--surface2);text-align:left;font-weight:700;width:100%}
+.sw{width:18px;height:18px;border-radius:5px;flex:none}
+.cats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat{justify-content:flex-start}
+.card{background:#f8f4ea;color:#17212b;border-radius:20px;overflow:hidden}
+.card-head{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-weight:700}
+.card-head em{font-style:normal;font-size:.8rem;font-family:var(--body);opacity:.85}
+.card-body{padding:18px 16px 16px;display:flex;flex-direction:column;gap:14px}
+.q{font-family:var(--display);font-weight:700;font-size:1.3rem;line-height:1.25;margin:0;text-wrap:balance}
+.ans{background:#ebe3d0;border-radius:14px;padding:14px;font-size:1.1rem;font-weight:700}
+.ans small{display:block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:#6b6352;margin-bottom:4px}
+.judge{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ok{background:#2f8f4e;color:#fff}.ko{background:#b23a48;color:#fff}
+.dark-btn{background:#17212b;color:#f8f4ea}
+.scores{display:flex;gap:6px}
+.score{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;font-size:.78rem;color:var(--muted)}
+.score.cur{background:var(--surface);color:var(--ink)}
+.score svg{width:38px;height:38px}
+.score .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.die{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:10px;background:#f6f1e6;color:#1b2633;font-weight:800;font-family:var(--display);font-size:1.4rem;box-shadow:0 3px 0 #b9ad95;flex:none}
+.die.rolling{animation:shake .12s linear infinite}
+@keyframes shake{25%{transform:rotate(-8deg)}75%{transform:rotate(8deg)}}
+.row{display:flex;gap:12px;align-items:center}
+.center{text-align:center;align-items:center}
+.big-ico{font-size:3rem;line-height:1}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="brand"><svg viewBox="-50 -50 100 100" id="logo" aria-hidden="true"></svg>Manette</div>
+    <div class="status" id="status"><i></i><span>Connexion…</span></div>
+  </div>
+  <div id="app"></div>
+</div>
+
+<script src="vendor/peerjs.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const COLS=['#2f7fd8','#e05a9b','#f2c230','#9a6234','#36a457','#f08a24'];
+const PCOL=['#f5efe2','#b79cff','#4fd1c5','#ff8a7a'];
+function wedge(r,k){const a0=-90+k*60,a1=a0+60,t0=a0*Math.PI/180,t1=a1*Math.PI/180;
+  return `M0 0L${(r*Math.cos(t0)).toFixed(2)} ${(r*Math.sin(t0)).toFixed(2)}A${r} ${r} 0 0 1 ${(r*Math.cos(t1)).toFixed(2)} ${(r*Math.sin(t1)).toFixed(2)}Z`;}
+function pie(w,r=46){let s=`<circle r="${r+2}" fill="#0b1724" stroke="#3a5978" stroke-width="2"/>`;
+  for(let k=0;k<6;k++)s+=`<path d="${wedge(r,k)}" fill="${w[k]?COLS[k]:'#203a55'}" stroke="#0b1724" stroke-width="2.5"/>`;return s;}
+const pieSvg=w=>`<svg viewBox="-50 -50 100 100" aria-hidden="true">${pie(w)}</svg>`;
+$('logo').innerHTML=pie([1,1,1,1,1,1]);
+
+const code=(new URLSearchParams(location.search).get('r')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+let peer=null,conn=null,V=null,retry=0,setupN=4,armT=null;
+const draft=[];
+
+function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=txt;}
+function act(a,extra){if(!conn||!conn.open){setStatus(false,'Hors ligne');return}
+  try{conn.send(Object.assign({t:'act',a},extra||{}))}catch(e){}
+  if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}}
+
+function connect(){
+  if(!code){$('app').innerHTML=`<div class="panel"><p class="msg">Lien incomplet. Scannez à nouveau le QR code affiché sur la TV.</p></div>`;setStatus(false,'Pas de partie');return;}
+  if(typeof Peer==='undefined'){$('app').innerHTML=`<div class="panel"><p class="msg">Impossible de charger la manette. Vérifiez la connexion internet puis rechargez la page.</p></div>`;return;}
+  setStatus(false,'Connexion…');
+  if(!peer||peer.destroyed){
+    peer=new Peer({debug:0});
+    peer.on('open',()=>openConn());
+    peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
+    peer.on('error',err=>{
+      if(err&&err.type==='peer-unavailable'){setStatus(false,'TV introuvable');
+        if(!V)$('app').innerHTML=`<div class="panel"><p class="msg">La TV (code <b>${esc(code)}</b>) ne répond pas. Vérifiez que la page du jeu est bien ouverte sur la TV.</p><button class="btn btn-ghost" onclick="openConn()">Réessayer</button></div>`;
+        schedule();return;}
+      if(err&&['network','server-error','socket-error','socket-closed'].includes(err.type)){peer.destroy();schedule();}
+    });
+  }else if(peer.open)openConn();
+}
+function schedule(){setTimeout(()=>{if(!conn||!conn.open)connect()},Math.min(10000,1500*(++retry)));}
+function openConn(){
+  if(conn&&conn.open)return;
+  try{conn&&conn.close()}catch(e){}
+  conn=peer.connect('camemberts-'+code,{reliable:true});
+  conn.on('open',()=>{retry=0;setStatus(true,'Connecté · '+code);});
+  conn.on('data',m=>{if(m&&m.t==='state'){V=m.v;render();}});
+  conn.on('close',()=>{setStatus(false,'Déconnecté');schedule();});
+  conn.on('error',()=>{setStatus(false,'Déconnecté');schedule();});
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(!conn||!conn.open))connect();});
+
+function render(){
+  const app=$('app');
+  if(!V){return}
+  if(V.mode==='setup'){const ae=document.activeElement;if(ae&&ae.matches&&ae.matches('#app input')&&app.dataset.mode==='setup'&&app.dataset.resume===JSON.stringify(V.resume))return;
+    app.dataset.mode='setup';app.dataset.resume=JSON.stringify(V.resume);return renderSetup(app);}
+  app.dataset.mode='game';
+  const p=V.players[V.cur];
+  let h=`<div class="turn"><div class="pawn" style="background:${p.color}">${V.cur+1}</div><div><span>Au tour de</span><strong>${esc(p.name)}</strong></div></div>`;
+  h+=`<div class="scores">${V.players.map((q,k)=>`<div class="score${k===V.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm">${esc(q.name)}</span></div>`).join('')}</div>`;
+  let body='';
+  if(V.msg&&V.phase!=='question'&&V.phase!=='win')body+=`<p class="msg">${esc(V.msg)}</p>`;
+  if(V.phase==='roll'){
+    body+=V.rolling?`<div class="row"><span class="die rolling">?</span><span class="muted">Le dé roule…</span></div>`
+      :`<button class="btn btn-main" data-a="roll">🎲 Lancer le dé</button>`;
+  }
+  if(V.phase==='choose'){
+    body+=`<div class="row"><span class="die">${V.roll}</span><span class="muted">Choisissez votre case</span></div>`;
+    body+=V.options.map(o=>`<button class="dir" data-a="go" data-i="${o.i}"><span class="sw" style="background:${o.c}"></span><span>${o.dir?o.dir+' ':''}${esc(o.t)}</span></button>`).join('');
+  }
+  if(V.phase==='final'){
+    body+=`<p class="msg"><b>Question finale.</b> Les adversaires de ${esc(p.name)} choisissent la catégorie :</p>`;
+    body+=`<div class="cats">${V.cats.map((c,k)=>`<button class="cat" data-a="fc" data-k="${k}" style="background:${c.color};color:${c.ink}">${esc(c.name)}</button>`).join('')}</div>`;
+  }
+  let main=`<div class="panel">${body}</div>`;
+  if(V.phase==='question'&&V.q){const q=V.q;
+    main=`<div class="card"><div class="card-head" style="background:${q.color};color:${q.ink}"><span>${esc(q.cat)}</span><em>${esc(q.tag)}</em></div><div class="card-body">
+      <p class="q">${esc(q.text)}</p>
+      ${q.shown?`<div class="ans"><small>Réponse</small>${esc(q.answer)}</div><div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`
+        :`<button class="btn dark-btn" data-a="show">Voir la réponse</button>`}</div></div>`;
+  }
+  if(V.phase==='win'){
+    main=`<div class="card"><div class="card-head" style="background:var(--gold);color:#1d1600;justify-content:center"><span>Victoire</span></div><div class="card-body center">
+      <div style="width:120px;height:120px">${pieSvg(V.players[V.cur].wedges)}</div><p class="q">${esc(V.winner)} remporte la partie !</p>
+      <button class="btn dark-btn" data-a="again">Nouvelle partie</button></div></div>`;
+  }
+  h+=main;
+  if(V.phase!=='win')h+=`<div class="row" style="justify-content:flex-end"><button class="btn-small" id="newg">Nouvelle partie</button></div>`;
+  app.innerHTML=h;
+  const ng=$('newg');if(ng)ng.onclick=function(){
+    if(this.classList.contains('armed')){clearTimeout(armT);act('newgame');return}
+    this.classList.add('armed');this.textContent='Confirmer ?';armT=setTimeout(()=>{this.classList.remove('armed');this.textContent='Nouvelle partie'},3000);};
+}
+function renderSetup(app){
+  [...document.querySelectorAll('#app input[data-k]')].forEach(i=>draft[+i.dataset.k]=i.value);
+  let h=`<div class="panel"><span class="label">Nouvelle partie</span><div class="chips">${[2,3,4].map(n=>`<button class="chip" aria-pressed="${n===setupN}" data-n="${n}">${n} joueurs</button>`).join('')}</div>`;
+  for(let k=0;k<setupN;k++)h+=`<div class="name-row"><div class="pawn" style="background:${PCOL[k]}">${k+1}</div><input data-k="${k}" maxlength="14" placeholder="Joueur ${k+1}" value="${esc(draft[k]||'')}" autocomplete="off"></div>`;
+  h+=`<button class="btn btn-main" id="go">Lancer la partie sur la TV</button></div>`;
+  if(V.resume)h+=`<div class="panel"><span class="label">Partie en cours</span><p class="msg muted">${esc(V.resume.join(', '))}</p><button class="btn btn-ghost" data-a="resume">Reprendre la partie</button></div>`;
+  app.innerHTML=h;
+  app.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{[...app.querySelectorAll('input[data-k]')].forEach(i=>draft[+i.dataset.k]=i.value);setupN=+b.dataset.n;renderSetup(app);});
+  $('go').onclick=()=>{const names=[];for(let k=0;k<setupN;k++){const v=(app.querySelector(`input[data-k="${k}"]`).value||'').trim();names.push(v||`Joueur ${k+1}`);}act('start',{names});};
+}
+$('app').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;
+  const a=b.dataset.a;if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc')act('fc',{k:+b.dataset.k});else act(a);
+  if(a!=='resume')b.disabled=true;});
+
+$('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV${code?' (code <b>'+esc(code)+'</b>)':''}…</p></div>`;
+connect();
+</script>
+</body>
+</html>
