@@ -130,6 +130,10 @@ body.kbd button:focus,body.kbd input:focus{outline:4px solid var(--gold);outline
 .qrimg svg{width:100%;height:100%;display:block}
 .qrimg.big{width:min(320px,70vw);height:min(320px,70vw);padding:12px}
 .qrveil{z-index:30}
+.bigcode{font-family:var(--display);font-weight:800;font-size:2.2rem!important;letter-spacing:.2em;color:var(--gold)!important;margin:2px 0!important;line-height:1}
+.bigcode.dark{color:#17212b!important;font-size:3rem!important}
+.qrbox .url{letter-spacing:0;color:var(--ink);word-break:break-all}
+.codepill{color:var(--ink)!important;background:var(--surface2)!important}.codepill b{color:var(--gold);letter-spacing:.12em}
 .ph{font-size:.8em;flex:none}.ph[hidden]{display:none}.name-row .ph{font-size:1.1em}
 @media (min-width:900px) and (orientation:landscape){
   #setup{grid-template-areas:"brand count" "btns names" "qr names" "hint names" "rules names"}
@@ -151,7 +155,7 @@ body.kbd button:focus,body.kbd input:focus{outline:4px solid var(--gold);outline
   <div class="names" id="names"></div>
   <p class="tvhint">Télécommande : flèches pour se déplacer, OK pour valider.</p>
   <p class="rules">Lancez le dé, choisissez votre sens, répondez à voix haute. Les autres jugent la réponse. Une bonne réponse sur une grande case rapporte le camembert de sa couleur. Avec les 6, une question finale choisie par les adversaires décide de la victoire.</p>
-  <div class="qrbox" id="qrbox" hidden><div class="qrimg" id="qrimg"></div><div><span class="label">Jouer depuis son téléphone</span><p>Scannez ce code pour piloter la partie depuis votre téléphone (même Wi-Fi conseillé).</p><p class="qrcode-txt">Code <b id="qrcode"></b> · <span id="qrcount">aucun téléphone connecté</span></p></div></div>
+  <div class="qrbox" id="qrbox" hidden><div class="qrimg" id="qrimg"></div><div><span class="label">Jouer depuis son téléphone</span><p>Scannez le QR code, ou ouvrez <b class="url" id="qrurl"></b> et tapez le code :</p><p class="bigcode" id="qrcode"></p><p class="qrcode-txt" id="qrcount">aucun téléphone connecté</p></div></div>
   <div class="names">
     <button class="btn btn-main" id="resume" hidden>Reprendre la partie</button>
     <button class="btn btn-ghost" id="start">Nouvelle partie</button>
@@ -162,7 +166,7 @@ body.kbd button:focus,body.kbd input:focus{outline:4px solid var(--gold);outline
 <div id="game" class="screen" hidden>
   <div class="topbar">
     <div class="turn"><div class="pawn" id="tpawn"></div><div style="min-width:0"><span>Au tour de</span><br><strong id="tname"></strong></div></div>
-    <div class="row" style="gap:8px;flex:none"><span class="sync" id="sync"></span><button class="menu" id="qrbtn" hidden>📱 <span id="qrn">0</span></button><button class="menu fsb" hidden>Plein écran</button><button class="menu" id="menu">Nouvelle partie</button></div>
+    <div class="row" style="gap:8px;flex:none"><span class="sync" id="sync"></span><button class="menu codepill" id="qrbtn" hidden>Code <b id="qrcode3"></b> · 📱 <span id="qrn">0</span></button><button class="menu fsb" hidden>Plein écran</button><button class="menu" id="menu">Nouvelle partie</button></div>
   </div>
   <div class="board-wrap"><svg id="board" viewBox="0 0 400 400" role="img" aria-label="Plateau de jeu"></svg></div>
   <div class="tray" id="tray"></div>
@@ -170,7 +174,7 @@ body.kbd button:focus,body.kbd input:focus{outline:4px solid var(--gold);outline
 </div>
 
 <div class="veil" id="veil" hidden></div>
-<div class="veil qrveil" id="qrveil" hidden><div class="card"><div class="card-head" style="background:var(--gold);color:#1d1600"><span>Rejoindre avec un téléphone</span><em id="qrcode2"></em></div><div class="card-body" style="align-items:center;text-align:center"><div class="qrimg big" id="qrimg2"></div><p style="margin:0">Scannez pour piloter la partie depuis votre téléphone.</p><button class="btn dark-btn" id="qrclose" style="width:100%">Fermer</button></div></div></div>
+<div class="veil qrveil" id="qrveil" hidden><div class="card"><div class="card-head" style="background:var(--gold);color:#1d1600"><span>Rejoindre avec un téléphone</span><em id="qrcode2"></em></div><div class="card-body" style="align-items:center;text-align:center"><div class="qrimg big" id="qrimg2"></div><p style="margin:0">Scannez le QR code, ou ouvrez <b id="qrurl2"></b> et tapez le code</p><p class="bigcode dark" id="qrcode4"></p><button class="btn dark-btn" id="qrclose" style="width:100%">Fermer</button></div></div></div>
 
 <script>
 const CATS=[

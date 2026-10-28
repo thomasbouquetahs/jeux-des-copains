@@ -21,7 +21,9 @@
   function showQr(){
     const svg=qrSvg(joinUrl());
     $('qrimg').innerHTML=svg;$('qrimg2').innerHTML=svg;
-    $('qrcode').textContent=code;$('qrcode2').textContent='Code '+code;
+    const short=new URL('m',location.href).href.replace(/^https?:\/\//,'');
+    $('qrcode').textContent=code;$('qrcode2').textContent='Code '+code;$('qrcode3').textContent=code;$('qrcode4').textContent=code;
+    $('qrurl').textContent=short;$('qrurl2').textContent=short;
     $('qrbox').hidden=false;$('qrbtn').hidden=false;
   }
 

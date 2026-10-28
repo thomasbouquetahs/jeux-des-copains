@@ -89,6 +89,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .hint{font-size:.85rem;color:var(--muted);margin:0;line-height:1.4}
 .score .on{width:7px;height:7px;border-radius:50%;background:#4fd18a;display:inline-block;margin-right:3px;vertical-align:1px}
 /* bandeau hors ligne */
+.codein{width:100%;padding:16px;border-radius:14px;border:2px solid var(--line);background:var(--surface2);color:var(--gold);font-family:var(--display);font-weight:800;font-size:2.4rem;letter-spacing:.35em;text-align:center;text-transform:uppercase}
+.status{padding:6px 10px;border-radius:999px;background:var(--surface)}
 .offbar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:#7a2131;color:#fff;text-align:center;font-weight:700;z-index:10}
 body.off #app{opacity:.45;pointer-events:none}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
@@ -117,20 +119,21 @@ function pie(w,r=46){let s=`<circle r="${r+2}" fill="#0b1724" stroke="#3a5978" s
 const pieSvg=w=>`<svg viewBox="-50 -50 100 100" aria-hidden="true">${pie(w)}</svg>`;
 $('logo').innerHTML=pie([1,1,1,1,1,1]);
 
-const code=(new URLSearchParams(location.search).get('r')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+const clean=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+let code=clean(new URLSearchParams(location.search).get('r'));
 const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}};
 let pid=LS.get('camemberts-pid');if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.set('camemberts-pid',pid);}
 let peer=null,conn=null,V=null,retry=0,armT=null,watch=false,lastMsg=0,live=false,askK=-1,askT=null;
 
 /* ---------- connexion ---------- */
-function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=txt;}
+function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=(code&&!txt.includes(code)?txt+' · '+code:txt);}
 function setLive(on){live=on;document.body.classList.toggle('off',!on&&!!V);$('offbar').hidden=on||!V;}
 function act(a,extra){if(!live||!conn||!conn.open){setLive(false);reconnect();return}
   try{conn.send(Object.assign({t:'act',a},extra||{}))}catch(e){}
   if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}}
 
 function connect(){
-  if(!code){$('app').innerHTML=`<div class="panel"><p class="msg">Lien incomplet. Scannez à nouveau le QR code affiché sur la TV.</p></div>`;setStatus(false,'Pas de partie');return;}
+  if(code.length!==4){renderCode();return;}
   if(typeof Peer==='undefined'){$('app').innerHTML=`<div class="panel"><p class="msg">Impossible de charger la manette. Vérifiez la connexion internet puis rechargez la page.</p></div>`;return;}
   setStatus(false,'Connexion…');
   if(!peer||peer.destroyed){
@@ -139,7 +142,7 @@ function connect(){
     peer.on('disconnected',()=>setTimeout(()=>{try{if(peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
     peer.on('error',err=>{const t=err&&err.type;
       if(t==='peer-unavailable'){setStatus(false,'TV injoignable');
-        if(!V)$('app').innerHTML=`<div class="panel"><p class="msg">La TV (code <b>${esc(code)}</b>) ne répond pas.</p><p class="hint">Vérifiez que la page du jeu est ouverte sur la TV et que le code affiché est bien <b>${esc(code)}</b>. Nouvel essai automatique…</p></div>`;
+        if(!V)renderCode(`Aucune TV ne répond au code <b>${esc(code)}</b>. Vérifie le code affiché en haut de la TV. Nouvel essai automatique…`);
         later();return;}
       if(peer.destroyed)later();
     });
@@ -273,8 +276,34 @@ $('app').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b
   if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc')act(a,{k:+b.dataset.k});else act(a);
   b.disabled=true;});
 
-$('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV${code?' (code <b>'+esc(code)+'</b>)':''}…</p></div>`;
-connect();
+/* saisie manuelle du code de la partie */
+function renderCode(err){
+  setStatus(false,code?'Code':'Pas de code');
+  const ex=$('codein');if(ex){const e=$('codeerr');if(e){e.innerHTML=err||'';e.hidden=!err;}return;}
+  $('app').innerHTML=`<div class="panel"><span class="label">Rejoindre une partie</span><p class="q" style="margin:0">Code de la partie</p>
+    <p class="hint">Il est affiché en haut de l’écran de la TV (4 caractères).</p>
+    <p class="msg" id="codeerr" style="color:#ff8a7a" ${err?'':'hidden'}>${err||''}</p>
+    <input id="codein" class="codein" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" placeholder="ABCD" value="${esc(code)}">
+    <button class="btn btn-main" id="codego">Rejoindre</button></div>`;
+  const i=$('codein'),go=()=>{const v=clean(i.value);if(v.length!==4){i.focus();return}setCode(v);};
+  i.addEventListener('input',()=>{const v=clean(i.value);if(i.value!==v)i.value=v;});
+  i.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+  $('codego').onclick=go;
+  if(!err)setTimeout(()=>i.focus(),50);
+}
+function setCode(v){
+  code=v;V=null;live=false;retry=0;setLive(false);
+  try{history.replaceState(null,'','?r='+v)}catch(e){}
+  try{conn&&conn.close()}catch(e){}conn=null;
+  $('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV (code <b>${esc(v)}</b>)…</p></div>`;
+  connect();
+}
+/* le code reste visible en haut : le toucher permet d'en changer */
+$('status').onclick=()=>{if($('codein'))return;if(confirm('Changer de code de partie ?')){clearTimeout(laterT);try{conn&&conn.close()}catch(e){}conn=null;V=null;live=false;setLive(false);$('app').innerHTML='';renderCode();}};
+$('status').style.cursor='pointer';
+
+if(code.length===4){$('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV (code <b>${esc(code)}</b>)…</p></div>`;connect();}
+else renderCode();
 </script>
 </body>
 </html>
