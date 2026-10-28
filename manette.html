@@ -106,7 +106,8 @@ body.off #app{opacity:.45;pointer-events:none}
 </div>
 <div class="offbar" id="offbar" hidden>Connexion à la TV perdue, reconnexion…</div>
 
-<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/mqtt.min.js"></script>
+<script src="relay-config.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -123,51 +124,65 @@ const clean=v=>String(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
 let code=clean(new URLSearchParams(location.search).get('r'));
 const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}};
 let pid=LS.get('camemberts-pid');if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.set('camemberts-pid',pid);}
-let peer=null,conn=null,V=null,retry=0,armT=null,watch=false,lastMsg=0,live=false,askK=-1,askT=null;
+let client=null,gen=0,found=false,V=null,armT=null,watch=false,lastMsg=0,live=false,offSince=0,askK=-1,askT=null;
+let pref=Math.max(0,+(new URLSearchParams(location.search).get('b'))||+LS.get('camemberts-broker')||0);
 
-/* ---------- connexion ---------- */
+/* ---------- connexion via le relais (fonctionne en 4G/5G comme en Wi-Fi) ---------- */
+const T=()=>RELAY.topic(code);
 function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=(code&&!txt.includes(code)?txt+' · '+code:txt);}
-function setLive(on){live=on;document.body.classList.toggle('off',!on&&!!V);$('offbar').hidden=on||!V;}
-function act(a,extra){if(!live||!conn||!conn.open){setLive(false);reconnect();return}
-  try{conn.send(Object.assign({t:'act',a},extra||{}))}catch(e){}
+function setLive(on){if(on===live&&on)return;live=on;if(!on&&!offSince)offSince=Date.now();if(on)offSince=0;
+  document.body.classList.toggle('off',!on&&!!V);$('offbar').hidden=on||!V;
+  if(on)setStatus(true,'Connecté');}
+function pub(m){if(!client||!client.connected||!found)return false;
+  try{client.publish(T()+'/up',JSON.stringify(Object.assign({p:pid},m)),{qos:0});return true}catch(e){return false}}
+function act(a,extra){if(!live||!pub(Object.assign({t:'act',a},extra||{}))){setLive(false);return}
   if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}}
+function stop(){gen++;found=false;if(client){try{client.end(true)}catch(e){}client=null;}}
 
 function connect(){
   if(code.length!==4){renderCode();return;}
-  if(typeof Peer==='undefined'){$('app').innerHTML=`<div class="panel"><p class="msg">Impossible de charger la manette. Vérifiez la connexion internet puis rechargez la page.</p></div>`;return;}
+  if(typeof mqtt==='undefined'||!window.RELAY){$('app').innerHTML=`<div class="panel"><p class="msg">Impossible de charger la manette. Vérifiez la connexion internet puis rechargez la page.</p></div>`;return;}
+  stop();const g=gen,n=RELAY.brokers.length,order=[...Array(n).keys()].map(k=>(pref+k)%n);
   setStatus(false,'Connexion…');
-  if(!peer||peer.destroyed){
-    peer=new Peer({debug:0});
-    peer.on('open',()=>openConn());
-    peer.on('disconnected',()=>setTimeout(()=>{try{if(peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
-    peer.on('error',err=>{const t=err&&err.type;
-      if(t==='peer-unavailable'){setStatus(false,'TV injoignable');
-        if(!V)renderCode(`Aucune TV ne répond au code <b>${esc(code)}</b>. Vérifie le code affiché en haut de la TV. Nouvel essai automatique…`);
-        later();return;}
-      if(peer.destroyed)later();
+  /* on essaie les relais un par un jusqu'à trouver celui où la TV est en ligne */
+  (function tryBroker(j){
+    if(g!==gen)return;
+    if(j>=n){setStatus(false,'TV introuvable');
+      if(!V)renderCode(`Aucune TV ne répond au code <b>${esc(code)}</b>. Vérifie le code affiché en haut de la TV. Nouvel essai automatique…`);
+      setTimeout(()=>{if(g===gen)connect()},4000);return;}
+    const bi=order[j];
+    if(client){try{client.end(true)}catch(e){}}
+    const c=mqtt.connect(RELAY.brokers[bi],{clientId:'ph-'+pid.slice(0,10)+'-'+Math.random().toString(36).slice(2,6),
+      keepalive:10,reconnectPeriod:2000,connectTimeout:7000,clean:true});
+    client=c;let tvSeen=false;
+    const giveUp=setTimeout(()=>{if(g===gen&&client===c&&!found){try{c.end(true)}catch(e){}tryBroker(j+1);}},7000);
+    c.on('connect',()=>{if(g!==gen||client!==c)return;
+      c.subscribe([T()+'/tv',T()+'/d/'+pid],{qos:0});
+      if(found)pub({t:'hello',name:LS.get('camemberts-name')});});
+    c.on('message',(topic,buf)=>{if(g!==gen||client!==c)return;let m;try{m=JSON.parse(buf.toString())}catch(e){return}
+      if(topic.endsWith('/tv')){
+        if(m&&m.on){tvSeen=true;
+          if(!found){found=true;clearTimeout(giveUp);pref=bi;LS.set('camemberts-broker',String(bi));}
+          pub({t:'hello',name:LS.get('camemberts-name')});lastMsg=Date.now();setStatus(true,'Connecté');}
+        else if(found){setLive(false);setStatus(false,'TV hors ligne');}
+        else{clearTimeout(giveUp);try{c.end(true)}catch(e){}tryBroker(j+1);}
+        return;}
+      if(!found)return;
+      lastMsg=Date.now();setLive(true);
+      if(m&&m.t==='state'){V=m.v;render();}
     });
-  }else if(peer.open)openConn();
-  else if(peer.disconnected){try{peer.reconnect()}catch(e){}}
+    c.on('offline',()=>{if(g===gen&&client===c&&found){setLive(false);setStatus(false,'Reconnexion…');}});
+  })(0);
 }
-let laterT=null;
-function later(){clearTimeout(laterT);laterT=setTimeout(()=>{if(!live)reconnect()},Math.min(8000,1200*(++retry)));}
-function reconnect(){if(peer&&peer.open)openConn();else connect();}
-function openConn(){
-  try{conn&&conn.close()}catch(e){}
-  const c=peer.connect('camemberts-'+code,{reliable:true});conn=c;
-  c.on('open',()=>{if(conn!==c)return;retry=0;lastMsg=Date.now();setLive(true);setStatus(true,'Connecté · '+code);
-    try{c.send({t:'hello',pid,name:LS.get('camemberts-name')})}catch(e){}});
-  c.on('data',m=>{if(conn!==c)return;lastMsg=Date.now();if(!live){setLive(true);setStatus(true,'Connecté · '+code);}
-    if(m&&m.t==='state'){V=m.v;render();}});
-  const lost=()=>{if(conn!==c)return;setLive(false);setStatus(false,'Reconnexion…');later();};
-  c.on('close',lost);c.on('error',lost);
-}
-/* battement de cœur : on vérifie toutes les 3 s que la TV répond */
+/* battement de cœur : toutes les 3 s on signale sa présence à la TV et on vérifie qu'elle répond */
 setInterval(()=>{
-  if(conn&&conn.open){try{conn.send({t:'ping'})}catch(e){}}
-  if(live&&Date.now()-lastMsg>9000){setLive(false);setStatus(false,'Reconnexion…');reconnect();}
+  if(found)pub({t:'ping'});
+  if(live&&Date.now()-lastMsg>9000){setLive(false);setStatus(false,'Reconnexion…');}
+  /* plus de nouvelles depuis 25 s : la TV a peut-être changé de relais, on recherche */
+  if(found&&!live&&offSince&&Date.now()-offSince>25000){offSince=Date.now();connect();}
 },3000);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){lastMsg=lastMsg||Date.now();if(!live||Date.now()-lastMsg>5000)reconnect();}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&found){pub({t:'ping'});
+  if(client&&!client.connected){try{client.reconnect()}catch(e){}}}});
 
 /* ---------- affichage ---------- */
 const wait=t=>`<p class="msg muted">${t}</p>`;
@@ -292,14 +307,13 @@ function renderCode(err){
   if(!err)setTimeout(()=>i.focus(),50);
 }
 function setCode(v){
-  code=v;V=null;live=false;retry=0;setLive(false);
+  code=v;V=null;setLive(false);offSince=0;
   try{history.replaceState(null,'','?r='+v)}catch(e){}
-  try{conn&&conn.close()}catch(e){}conn=null;
   $('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV (code <b>${esc(v)}</b>)…</p></div>`;
   connect();
 }
 /* le code reste visible en haut : le toucher permet d'en changer */
-$('status').onclick=()=>{if($('codein'))return;if(confirm('Changer de code de partie ?')){clearTimeout(laterT);try{conn&&conn.close()}catch(e){}conn=null;V=null;live=false;setLive(false);$('app').innerHTML='';renderCode();}};
+$('status').onclick=()=>{if($('codein'))return;if(confirm('Changer de code de partie ?')){stop();V=null;setLive(false);$('app').innerHTML='';renderCode();}};
 $('status').style.cursor='pointer';
 
 if(code.length===4){$('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV (code <b>${esc(code)}</b>)…</p></div>`;connect();}

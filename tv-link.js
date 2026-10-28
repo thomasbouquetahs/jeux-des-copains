@@ -1,23 +1,25 @@
-/* Les Camemberts — liaison TV ↔ téléphones (QR code + WebRTC via PeerJS).
+/* Les Camemberts — liaison TV ↔ téléphones (QR code + relais MQTT).
    La TV reste maître de la partie : chaque téléphone s'identifie comme un joueur,
    reçoit une vue personnelle et envoie les mêmes actions que les boutons de l'écran.
-   Le serveur PeerJS ne sert qu'à la mise en relation : une fois connectés, TV et
-   téléphones échangent en direct (sur le Wi-Fi local quand tout le monde y est).
+   Tous les échanges passent par un relais en ligne : ça fonctionne en 4G/5G comme en Wi-Fi.
    Aucune règle du jeu n'est modifiée. */
 (function(){
-  if(typeof Peer==='undefined'||typeof qrcode==='undefined')return;
-  const ROOM_KEY='camemberts-room',PREFIX='camemberts-';
+  if(typeof mqtt==='undefined'||typeof qrcode==='undefined'||!window.RELAY)return;
+  const ROOM_KEY='camemberts-room',BROKER_KEY='camemberts-broker';
   const ALPHA='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const newCode=()=>Array.from({length:4},()=>ALPHA[Math.floor(Math.random()*ALPHA.length)]).join('');
   let code;try{code=localStorage.getItem(ROOM_KEY)}catch(e){}
   if(!code||!/^[A-Z0-9]{4}$/.test(code))code=newCode();
-  let peer=null,retry=0,idTries=0;
-  const conns=new Map();      // connexion -> {pid, seen}
+  try{localStorage.setItem(ROOM_KEY,code)}catch(e){}
+  let bi=0;try{bi=Math.max(0,Math.min(RELAY.brokers.length-1,+localStorage.getItem(BROKER_KEY)||0))}catch(e){}
+  const T=RELAY.topic(code);
+  let client=null,up=false;
+  const phones=new Map();     // pid -> {seen}
   let lobby=[];               // salon avant partie : [{pid,name}]
 
   /* ---------- QR code ---------- */
   function qrSvg(text){const q=qrcode(0,'M');q.addData(text);q.make();return q.createSvgTag({cellSize:4,margin:0,scalable:true});}
-  function joinUrl(){return new URL('manette.html?r='+code,location.href).href;}
+  function joinUrl(){return new URL('manette.html?r='+code+'&b='+bi,location.href).href;}
   function showQr(){
     const svg=qrSvg(joinUrl());
     $('qrimg').innerHTML=svg;$('qrimg2').innerHTML=svg;
@@ -27,29 +29,29 @@
     $('qrbox').hidden=false;$('qrbtn').hidden=false;
   }
 
-  /* ---------- connexion ---------- */
-  function start(){
-    peer=new Peer(PREFIX+code,{debug:0});
-    peer.on('open',()=>{retry=0;idTries=0;try{localStorage.setItem(ROOM_KEY,code)}catch(e){}showQr();});
-    peer.on('connection',c=>{
-      c.on('open',()=>{conns.set(c,{pid:null,seen:Date.now()});});
-      c.on('data',m=>onMsg(c,m));
-      const bye=()=>{if(conns.delete(c))changed();};
-      c.on('close',bye);c.on('error',bye);
-    });
-    /* perte du serveur de mise en relation : on se ré-annonce sans couper les téléphones déjà connectés */
-    peer.on('disconnected',()=>setTimeout(()=>{try{if(peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1500));
-    peer.on('error',err=>{const t=err&&err.type;
-      if(t==='unavailable-id'){ /* l'ancien onglet TV tient encore le code : on patiente puis on change de code */
-        peer.destroy();if(++idTries>=4){code=newCode();idTries=0;}setTimeout(start,2500);return;}
-      if(t==='browser-incompatible'||t==='ssl-unavailable')return;
-      if(peer.destroyed){setTimeout(start,Math.min(15000,1500*(++retry)));}
-      else if(peer.disconnected){setTimeout(()=>{try{peer.reconnect()}catch(e){}},Math.min(15000,1500*(++retry)));}
-    });
+  /* ---------- connexion au relais ---------- */
+  function start(i){
+    bi=i;const tvMsg=on=>JSON.stringify({on,b:bi,ts:Date.now()});
+    if(client){try{client.end(true)}catch(e){}}
+    const c=mqtt.connect(RELAY.brokers[i],{clientId:'tv-'+code+'-'+Math.random().toString(36).slice(2,8),
+      keepalive:10,reconnectPeriod:2000,connectTimeout:8000,clean:true,
+      will:{topic:T+'/tv',payload:tvMsg(false),qos:1,retain:true}});
+    client=c;let ok=false;
+    c.on('connect',()=>{ok=true;up=true;
+      try{localStorage.setItem(BROKER_KEY,String(i))}catch(e){}
+      c.subscribe(T+'/up',{qos:0});
+      c.publish(T+'/tv',tvMsg(true),{qos:1,retain:true});
+      showQr();updTv();broadcast();});
+    c.on('close',()=>{if(client===c){up=false;updTv();}});
+    c.on('message',(topic,buf)=>{if(client!==c)return;let m;try{m=JSON.parse(buf.toString())}catch(e){return}onMsg(m);});
+    /* relais injoignable : on passe au suivant */
+    setTimeout(()=>{if(!ok&&client===c)start((i+1)%RELAY.brokers.length);},8000);
   }
-  /* un téléphone qui ne donne plus signe de vie depuis 12 s est considéré parti */
+  window.addEventListener('pagehide',()=>{try{client&&client.connected&&client.publish(T+'/tv',JSON.stringify({on:false,b:bi}),{qos:0,retain:true})}catch(e){}});
+
+  /* un téléphone silencieux depuis 12 s est considéré parti */
   setInterval(()=>{const now=Date.now();let gone=false;
-    conns.forEach((v,c)=>{if(now-v.seen>12000){conns.delete(c);gone=true;try{c.close()}catch(e){}}});
+    phones.forEach((v,pid)=>{if(now-v.seen>12000){phones.delete(pid);gone=true;}});
     /* salon : on oublie un joueur déconnecté depuis plus de 45 s */
     if(!inGame()){const on=onlinePids(),before=lobby.length;
       lobby.forEach(l=>{if(on.has(l.pid))l.last=now;});
@@ -60,7 +62,7 @@
   /* ---------- qui est qui ---------- */
   const inGame=()=>!!(S&&!$('game').hidden);
   const devs=()=>{if(S&&!S.devices)S.devices={};return S?S.devices:{};};
-  const onlinePids=()=>new Set([...conns.values()].map(v=>v.pid).filter(Boolean));
+  const onlinePids=()=>new Set(phones.keys());
   const meOf=pid=>{const d=devs()[pid];return typeof d==='number'?d:-1;};
   const online=k=>{const on=onlinePids(),d=devs();return Object.keys(d).some(p=>d[p]===k&&on.has(p));};
   const othersOnline=k=>S.players.some((_,j)=>j!==k&&online(j));
@@ -93,7 +95,7 @@
       txt=names.length?'📱 '+names.join(', '):(n?n+' téléphone'+(n>1?'s':'')+' connecté'+(n>1?'s':''):'aucun téléphone connecté');}
     else{const names=lobby.filter(l=>on.has(l.pid)).map(l=>l.name);
       txt=names.length?'📱 '+names.join(', '):(n?n+' téléphone'+(n>1?'s':'')+' connecté'+(n>1?'s':''):'aucun téléphone connecté');}
-    $('qrcount').textContent=txt;
+    $('qrcount').textContent=up?txt:'⏳ Connexion au serveur…';
     if(inGame())document.querySelectorAll('#scores .score').forEach((el,k)=>{
       let b=el.querySelector('.ph');if(!b){b=document.createElement('span');b.className='ph';b.textContent='📱';b.title='Téléphone connecté';el.appendChild(b);}
       b.hidden=!online(k);});
@@ -120,27 +122,25 @@
     if(S.phase==='win')v.winner=p.name;
     return v;
   }
-  function send(c){const v=conns.get(c);if(!v||!v.pid)return;try{c.open&&c.send({t:'state',v:view(v.pid)})}catch(e){}}
+  function pub(pid,m,retain){if(!client||!client.connected)return;try{client.publish(T+'/d/'+pid,JSON.stringify(m),{qos:0,retain:!!retain})}catch(e){}}
+  function send(pid){pub(pid,{t:'state',v:view(pid)},true);}
   let pending=false;
   function broadcast(){if(pending)return;pending=true;
-    Promise.resolve().then(()=>{pending=false;conns.forEach((_,c)=>send(c));});}
+    Promise.resolve().then(()=>{pending=false;phones.forEach((_,pid)=>send(pid));});}
 
   /* ---------- messages reçus ---------- */
   function click(id){const el=$(id);if(el&&!el.hidden&&!el.disabled)el.click();}
-  function onMsg(c,m){
-    const info=conns.get(c);if(!info||!m||typeof m!=='object')return;
-    info.seen=Date.now();
-    if(m.t==='ping'){try{c.send({t:'pong'})}catch(e){}return;}
+  function onMsg(m){
+    if(!m||typeof m!=='object')return;
+    const pid=String(m.p||'').slice(0,40);if(!pid)return;
+    const known=phones.has(pid);phones.set(pid,{seen:Date.now()});
+    if(m.t==='ping'){if(known)pub(pid,{t:'pong'});else{changed();send(pid);}return;}
     if(m.t==='hello'){
-      const pid=String(m.pid||'').slice(0,40);if(!pid)return;
-      /* un même téléphone qui revient : on ferme son ancienne connexion */
-      conns.forEach((v,o)=>{if(o!==c&&v.pid===pid){conns.delete(o);try{o.close()}catch(e){}}});
-      info.pid=pid;
       const name=String(m.name||'').trim().slice(0,14);
       if(!inGame()&&name&&!lobby.some(l=>l.pid===pid)&&lobby.length<4)lobby.push({pid,name,last:Date.now()});
-      changed();send(c);return;}
+      changed();send(pid);return;}
+    if(!known)changed();
     if(m.t!=='act')return;
-    const pid=info.pid;if(!pid)return;
     const g=inGame();
     switch(m.a){
       /* salon */
@@ -182,5 +182,6 @@
   $('qrveil').addEventListener('click',e=>{if(e.target.id==='qrveil'){$('qrveil').hidden=true;focusMain();}});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('qrveil').hidden){$('qrveil').hidden=true;focusMain();}});
 
-  start();
+  showQr();updTv();
+  start(bi);
 })();
