@@ -99,8 +99,9 @@ const pieSvg=w=>`<svg viewBox="-50 -50 100 100" aria-hidden="true">${pie(w)}</sv
 $('logo').innerHTML=pie([1,1,1,1,1,1]);
 
 const code=(new URLSearchParams(location.search).get('r')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-let peer=null,conn=null,V=null,retry=0,setupN=4,armT=null;
-const draft=[];
+const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}};
+let pid=LS.get('camemberts-pid');if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.set('camemberts-pid',pid);}
+let peer=null,conn=null,V=null,retry=0,armT=null,watch=false;
 
 function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=txt;}
 function act(a,extra){if(!conn||!conn.open){setStatus(false,'Hors ligne');return}
@@ -128,68 +129,101 @@ function openConn(){
   if(conn&&conn.open)return;
   try{conn&&conn.close()}catch(e){}
   conn=peer.connect('camemberts-'+code,{reliable:true});
-  conn.on('open',()=>{retry=0;setStatus(true,'Connecté · '+code);});
+  conn.on('open',()=>{retry=0;setStatus(true,'Connecté · '+code);
+    try{conn.send({t:'hello',pid,name:LS.get('camemberts-name')})}catch(e){}});
   conn.on('data',m=>{if(m&&m.t==='state'){V=m.v;render();}});
   conn.on('close',()=>{setStatus(false,'Déconnecté');schedule();});
   conn.on('error',()=>{setStatus(false,'Déconnecté');schedule();});
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(!conn||!conn.open))connect();});
 
+const scoresHtml=()=>`<div class="scores">${V.players.map((q,k)=>`<div class="score${k===V.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm">${esc(q.name)}</span></div>`).join('')}</div>`;
+const wait=t=>`<p class="msg muted">${t}</p>`;
+
 function render(){
   const app=$('app');
-  if(!V){return}
-  if(V.mode==='setup'){const ae=document.activeElement;if(ae&&ae.matches&&ae.matches('#app input')&&app.dataset.mode==='setup'&&app.dataset.resume===JSON.stringify(V.resume))return;
-    app.dataset.mode='setup';app.dataset.resume=JSON.stringify(V.resume);return renderSetup(app);}
-  app.dataset.mode='game';
-  const p=V.players[V.cur];
-  let h=`<div class="turn"><div class="pawn" style="background:${p.color}">${V.cur+1}</div><div><span>Au tour de</span><strong>${esc(p.name)}</strong></div></div>`;
-  h+=`<div class="scores">${V.players.map((q,k)=>`<div class="score${k===V.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm">${esc(q.name)}</span></div>`).join('')}</div>`;
+  if(!V)return;
+  if(V.mode==='setup'){const ae=document.activeElement;
+    const key=JSON.stringify([V.lobby,V.me,V.resume]);
+    if(ae&&ae.matches&&ae.matches('#app input')&&app.dataset.key===key)return;
+    app.dataset.key=key;return renderSetup(app);}
+  app.dataset.key='';
+  if(V.me<0&&!watch)return renderWho(app);
+  const p=V.players[V.cur],me=V.me,mine=me===V.cur;
+  let h='';
+  if(me>=0)h+=`<div class="turn"><div class="pawn" style="background:${V.players[me].color}">${me+1}</div><div><span>Tu joues</span><strong>${esc(V.players[me].name)}</strong></div></div>`;
+  else h+=`<div class="turn"><div><span>Spectateur</span><strong>Au tour de ${esc(p.name)}</strong></div></div>`;
+  h+=scoresHtml();
   let body='';
-  if(V.msg&&V.phase!=='question'&&V.phase!=='win')body+=`<p class="msg">${esc(V.msg)}</p>`;
+  const turnTitle=mine?`<p class="msg"><b>C'est ton tour !</b></p>`:`<p class="msg"><b>Au tour de ${esc(p.name)}</b></p>`;
+  if(V.phase!=='question'&&V.phase!=='win'){body+=turnTitle;if(V.msg)body+=`<p class="msg muted">${esc(V.msg)}</p>`;}
   if(V.phase==='roll'){
-    body+=V.rolling?`<div class="row"><span class="die rolling">?</span><span class="muted">Le dé roule…</span></div>`
-      :`<button class="btn btn-main" data-a="roll">🎲 Lancer le dé</button>`;
+    if(V.rolling)body+=`<div class="row"><span class="die rolling">?</span><span class="muted">Le dé roule…</span></div>`;
+    else if(V.canPlay)body+=`<button class="btn btn-main" data-a="roll">🎲 Lancer le dé</button>`;
+    else body+=wait(`${esc(p.name)} lance le dé…`);
   }
   if(V.phase==='choose'){
-    body+=`<div class="row"><span class="die">${V.roll}</span><span class="muted">Choisissez votre case</span></div>`;
-    body+=V.options.map(o=>`<button class="dir" data-a="go" data-i="${o.i}"><span class="sw" style="background:${o.c}"></span><span>${o.dir?o.dir+' ':''}${esc(o.t)}</span></button>`).join('');
+    body+=`<div class="row"><span class="die">${V.roll}</span><span class="muted">${V.canPlay?'Choisis ta case':esc(p.name)+' choisit sa case…'}</span></div>`;
+    if(V.canPlay)body+=V.options.map(o=>`<button class="dir" data-a="go" data-i="${o.i}"><span class="sw" style="background:${o.c}"></span><span>${o.dir?o.dir+' ':''}${esc(o.t)}</span></button>`).join('');
   }
   if(V.phase==='final'){
-    body+=`<p class="msg"><b>Question finale.</b> Les adversaires de ${esc(p.name)} choisissent la catégorie :</p>`;
-    body+=`<div class="cats">${V.cats.map((c,k)=>`<button class="cat" data-a="fc" data-k="${k}" style="background:${c.color};color:${c.ink}">${esc(c.name)}</button>`).join('')}</div>`;
+    if(V.canJudge){body+=`<p class="msg"><b>Question finale de ${esc(p.name)}.</b> Choisissez sa catégorie :</p>`;
+      body+=`<div class="cats">${V.cats.map((c,k)=>`<button class="cat" data-a="fc" data-k="${k}" style="background:${c.color};color:${c.ink}">${esc(c.name)}</button>`).join('')}</div>`;}
+    else body+=wait(mine?'Question finale ! Tes adversaires choisissent ta catégorie…':`Les adversaires de ${esc(p.name)} choisissent la catégorie…`);
   }
   let main=`<div class="panel">${body}</div>`;
-  if(V.phase==='question'&&V.q){const q=V.q;
+  if(V.phase==='question'&&V.q){const q=V.q;let foot;
+    if(V.canJudge)foot=q.shown?`<div class="ans"><small>Réponse</small>${esc(q.answer)}</div><div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`
+        :`<button class="btn dark-btn" data-a="show">Voir la réponse</button>`;
+    else if(mine)foot=`<div class="ans" style="background:#f2c230"><small style="color:#5a4700">À toi</small>Réponds à voix haute !</div>`;
+    else foot=`<p class="msg" style="color:#6b6352">${esc(p.name)} répond…</p>`;
     main=`<div class="card"><div class="card-head" style="background:${q.color};color:${q.ink}"><span>${esc(q.cat)}</span><em>${esc(q.tag)}</em></div><div class="card-body">
-      <p class="q">${esc(q.text)}</p>
-      ${q.shown?`<div class="ans"><small>Réponse</small>${esc(q.answer)}</div><div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`
-        :`<button class="btn dark-btn" data-a="show">Voir la réponse</button>`}</div></div>`;
+      ${mine?'':`<span style="font-size:.8rem;color:#6b6352;font-weight:700">Question pour ${esc(p.name)}</span>`}<p class="q">${esc(q.text)}</p>${foot}</div></div>`;
   }
   if(V.phase==='win'){
     main=`<div class="card"><div class="card-head" style="background:var(--gold);color:#1d1600;justify-content:center"><span>Victoire</span></div><div class="card-body center">
-      <div style="width:120px;height:120px">${pieSvg(V.players[V.cur].wedges)}</div><p class="q">${esc(V.winner)} remporte la partie !</p>
+      <div style="width:120px;height:120px">${pieSvg(V.players[V.cur].wedges)}</div><p class="q">${mine?'Bravo, tu remportes la partie !':esc(V.winner)+' remporte la partie !'}</p>
       <button class="btn dark-btn" data-a="again">Nouvelle partie</button></div></div>`;
   }
   h+=main;
-  if(V.phase!=='win')h+=`<div class="row" style="justify-content:flex-end"><button class="btn-small" id="newg">Nouvelle partie</button></div>`;
+  h+=`<div class="row" style="justify-content:space-between"><button class="btn-small" id="who">${me>=0?'Changer de joueur':'Choisir mon joueur'}</button>${V.phase!=='win'?'<button class="btn-small" id="newg">Nouvelle partie</button>':''}</div>`;
   app.innerHTML=h;
+  $('who').onclick=()=>{watch=false;if(me>=0)act('unbind');else render();};
   const ng=$('newg');if(ng)ng.onclick=function(){
     if(this.classList.contains('armed')){clearTimeout(armT);act('newgame');return}
     this.classList.add('armed');this.textContent='Confirmer ?';armT=setTimeout(()=>{this.classList.remove('armed');this.textContent='Nouvelle partie'},3000);};
 }
-function renderSetup(app){
-  [...document.querySelectorAll('#app input[data-k]')].forEach(i=>draft[+i.dataset.k]=i.value);
-  let h=`<div class="panel"><span class="label">Nouvelle partie</span><div class="chips">${[2,3,4].map(n=>`<button class="chip" aria-pressed="${n===setupN}" data-n="${n}">${n} joueurs</button>`).join('')}</div>`;
-  for(let k=0;k<setupN;k++)h+=`<div class="name-row"><div class="pawn" style="background:${PCOL[k]}">${k+1}</div><input data-k="${k}" maxlength="14" placeholder="Joueur ${k+1}" value="${esc(draft[k]||'')}" autocomplete="off"></div>`;
-  h+=`<button class="btn btn-main" id="go">Lancer la partie sur la TV</button></div>`;
-  if(V.resume)h+=`<div class="panel"><span class="label">Partie en cours</span><p class="msg muted">${esc(V.resume.join(', '))}</p><button class="btn btn-ghost" data-a="resume">Reprendre la partie</button></div>`;
+function renderWho(app){
+  let h=`<div class="panel"><span class="label">Partie en cours</span><p class="q" style="margin:0">Qui es-tu ?</p>`;
+  h+=V.players.map((q,k)=>`<button class="dir" data-a="iam" data-k="${k}"><span class="pawn" style="background:${q.color}">${k+1}</span><span style="flex:1">${esc(q.name)}</span>${q.taken?'<span class="muted" style="font-weight:400;font-size:.85rem">déjà pris</span>':''}</button>`).join('');
+  h+=`</div><button class="btn btn-ghost" id="watch">Juste regarder</button>`;
   app.innerHTML=h;
-  app.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{[...app.querySelectorAll('input[data-k]')].forEach(i=>draft[+i.dataset.k]=i.value);setupN=+b.dataset.n;renderSetup(app);});
-  $('go').onclick=()=>{const names=[];for(let k=0;k<setupN;k++){const v=(app.querySelector(`input[data-k="${k}"]`).value||'').trim();names.push(v||`Joueur ${k+1}`);}act('start',{names});};
+  $('watch').onclick=()=>{watch=true;render();};
+}
+function renderSetup(app){
+  const me=V.me,n=V.lobby.length;
+  let h='';
+  if(me<0){
+    h+=`<div class="panel"><span class="label">Nouvelle partie</span><p class="q" style="margin:0">Qui es-tu ?</p>`;
+    if(n<4)h+=`<div class="name-row"><div class="pawn" style="background:${PCOL[n]}">${n+1}</div><input id="myname" maxlength="14" placeholder="Ton prénom" value="${esc(LS.get('camemberts-name'))}" autocomplete="off" enterkeyhint="go"></div><button class="btn btn-main" id="join">Rejoindre la partie</button>`;
+    else h+=wait('La partie est complète (4 joueurs).');
+    h+=`</div>`;
+  }else{
+    h+=`<div class="panel"><span class="label">Tu es inscrit·e</span><div class="turn"><div class="pawn" style="background:${PCOL[me]}">${me+1}</div><strong>${esc(V.lobby[me])}</strong></div>`;
+    h+=n>=2?`<button class="btn btn-main" data-a="start">Lancer la partie (${n} joueurs)</button>`:wait('En attente d’au moins un autre joueur…');
+    h+=`<button class="btn-small" id="leave" style="align-self:flex-start">Changer de prénom</button></div>`;
+  }
+  if(n)h+=`<div class="panel"><span class="label">Joueurs inscrits (${n}/4)</span>${V.lobby.map((nm,k)=>`<div class="row"><div class="pawn" style="background:${PCOL[k]}">${k+1}</div><span>${esc(nm)}${k===me?' <span class="muted">(toi)</span>':''}</span></div>`).join('')}</div>`;
+  if(V.resume)h+=`<div class="panel"><span class="label">Partie sauvegardée</span><p class="msg muted">${esc(V.resume.join(', '))}</p><button class="btn btn-ghost" data-a="resume">Reprendre cette partie</button></div>`;
+  app.innerHTML=h;
+  const j=$('join');if(j){const go=()=>{const v=$('myname').value.trim();if(!v){$('myname').focus();return}LS.set('camemberts-name',v);act('join',{name:v});};
+    j.onclick=go;$('myname').addEventListener('keydown',e=>{if(e.key==='Enter')go();});}
+  const l=$('leave');if(l)l.onclick=()=>{LS.set('camemberts-name','');act('leave');};
 }
 $('app').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;
-  const a=b.dataset.a;if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc')act('fc',{k:+b.dataset.k});else act(a);
-  if(a!=='resume')b.disabled=true;});
+  const a=b.dataset.a;
+  if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc'||a==='iam')act(a,{k:+b.dataset.k});else act(a);
+  b.disabled=true;});
 
 $('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV${code?' (code <b>'+esc(code)+'</b>)':''}…</p></div>`;
 connect();
