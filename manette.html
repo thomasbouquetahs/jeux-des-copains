@@ -73,6 +73,24 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
 .row{display:flex;gap:12px;align-items:center}
 .center{text-align:center;align-items:center}
 .big-ico{font-size:3rem;line-height:1}
+/* cartes joueurs (choix d'identité, salon) */
+.who{display:flex;flex-direction:column;gap:10px}
+.pl{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--surface2);border:2px solid var(--line);text-align:left;width:100%}
+.pl .pawn{width:34px;height:34px;font-size:.95rem}
+.pl .nm{flex:1;min-width:0;font-weight:700;font-size:1.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .st{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px;flex:none}
+.dot{width:9px;height:9px;border-radius:50%;background:#4fd18a;flex:none}
+.dot.off{background:#5d7690}
+.pl.free{border-color:var(--gold)}
+.pl.free .st{color:var(--gold);font-weight:700}
+.pl.busy{opacity:.6}
+.pl.me{border-color:#4fd18a;background:#1d3d40}
+.pl.ask{border-color:#ff8a7a}
+.hint{font-size:.85rem;color:var(--muted);margin:0;line-height:1.4}
+.score .on{width:7px;height:7px;border-radius:50%;background:#4fd18a;display:inline-block;margin-right:3px;vertical-align:1px}
+/* bandeau hors ligne */
+.offbar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:#7a2131;color:#fff;text-align:center;font-weight:700;z-index:10}
+body.off #app{opacity:.45;pointer-events:none}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 </head>
@@ -84,6 +102,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--gold);outline-o
   </div>
   <div id="app"></div>
 </div>
+<div class="offbar" id="offbar" hidden>Connexion à la TV perdue, reconnexion…</div>
 
 <script src="vendor/peerjs.min.js"></script>
 <script>
@@ -101,10 +120,12 @@ $('logo').innerHTML=pie([1,1,1,1,1,1]);
 const code=(new URLSearchParams(location.search).get('r')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const LS={get(k){try{return localStorage.getItem(k)||''}catch(e){return ''}},set(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}};
 let pid=LS.get('camemberts-pid');if(!pid){pid=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.set('camemberts-pid',pid);}
-let peer=null,conn=null,V=null,retry=0,armT=null,watch=false;
+let peer=null,conn=null,V=null,retry=0,armT=null,watch=false,lastMsg=0,live=false,askK=-1,askT=null;
 
+/* ---------- connexion ---------- */
 function setStatus(on,txt){$('status').className='status'+(on?' on':'');$('status').querySelector('span').textContent=txt;}
-function act(a,extra){if(!conn||!conn.open){setStatus(false,'Hors ligne');return}
+function setLive(on){live=on;document.body.classList.toggle('off',!on&&!!V);$('offbar').hidden=on||!V;}
+function act(a,extra){if(!live||!conn||!conn.open){setLive(false);reconnect();return}
   try{conn.send(Object.assign({t:'act',a},extra||{}))}catch(e){}
   if(navigator.vibrate)try{navigator.vibrate(15)}catch(e){}}
 
@@ -115,40 +136,51 @@ function connect(){
   if(!peer||peer.destroyed){
     peer=new Peer({debug:0});
     peer.on('open',()=>openConn());
-    peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
-    peer.on('error',err=>{
-      if(err&&err.type==='peer-unavailable'){setStatus(false,'TV introuvable');
-        if(!V)$('app').innerHTML=`<div class="panel"><p class="msg">La TV (code <b>${esc(code)}</b>) ne répond pas. Vérifiez que la page du jeu est bien ouverte sur la TV.</p><button class="btn btn-ghost" onclick="openConn()">Réessayer</button></div>`;
-        schedule();return;}
-      if(err&&['network','server-error','socket-error','socket-closed'].includes(err.type)){peer.destroy();schedule();}
+    peer.on('disconnected',()=>setTimeout(()=>{try{if(peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1000));
+    peer.on('error',err=>{const t=err&&err.type;
+      if(t==='peer-unavailable'){setStatus(false,'TV injoignable');
+        if(!V)$('app').innerHTML=`<div class="panel"><p class="msg">La TV (code <b>${esc(code)}</b>) ne répond pas.</p><p class="hint">Vérifiez que la page du jeu est ouverte sur la TV et que le code affiché est bien <b>${esc(code)}</b>. Nouvel essai automatique…</p></div>`;
+        later();return;}
+      if(peer.destroyed)later();
     });
   }else if(peer.open)openConn();
+  else if(peer.disconnected){try{peer.reconnect()}catch(e){}}
 }
-function schedule(){setTimeout(()=>{if(!conn||!conn.open)connect()},Math.min(10000,1500*(++retry)));}
+let laterT=null;
+function later(){clearTimeout(laterT);laterT=setTimeout(()=>{if(!live)reconnect()},Math.min(8000,1200*(++retry)));}
+function reconnect(){if(peer&&peer.open)openConn();else connect();}
 function openConn(){
-  if(conn&&conn.open)return;
   try{conn&&conn.close()}catch(e){}
-  conn=peer.connect('camemberts-'+code,{reliable:true});
-  conn.on('open',()=>{retry=0;setStatus(true,'Connecté · '+code);
-    try{conn.send({t:'hello',pid,name:LS.get('camemberts-name')})}catch(e){}});
-  conn.on('data',m=>{if(m&&m.t==='state'){V=m.v;render();}});
-  conn.on('close',()=>{setStatus(false,'Déconnecté');schedule();});
-  conn.on('error',()=>{setStatus(false,'Déconnecté');schedule();});
+  const c=peer.connect('camemberts-'+code,{reliable:true});conn=c;
+  c.on('open',()=>{if(conn!==c)return;retry=0;lastMsg=Date.now();setLive(true);setStatus(true,'Connecté · '+code);
+    try{c.send({t:'hello',pid,name:LS.get('camemberts-name')})}catch(e){}});
+  c.on('data',m=>{if(conn!==c)return;lastMsg=Date.now();if(!live){setLive(true);setStatus(true,'Connecté · '+code);}
+    if(m&&m.t==='state'){V=m.v;render();}});
+  const lost=()=>{if(conn!==c)return;setLive(false);setStatus(false,'Reconnexion…');later();};
+  c.on('close',lost);c.on('error',lost);
 }
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&(!conn||!conn.open))connect();});
+/* battement de cœur : on vérifie toutes les 3 s que la TV répond */
+setInterval(()=>{
+  if(conn&&conn.open){try{conn.send({t:'ping'})}catch(e){}}
+  if(live&&Date.now()-lastMsg>9000){setLive(false);setStatus(false,'Reconnexion…');reconnect();}
+},3000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){lastMsg=lastMsg||Date.now();if(!live||Date.now()-lastMsg>5000)reconnect();}});
 
-const scoresHtml=()=>`<div class="scores">${V.players.map((q,k)=>`<div class="score${k===V.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm">${esc(q.name)}</span></div>`).join('')}</div>`;
+/* ---------- affichage ---------- */
 const wait=t=>`<p class="msg muted">${t}</p>`;
+function scoresHtml(){return `<div class="scores">${V.players.map((q,k)=>`<div class="score${k===V.cur?' cur':''}">${pieSvg(q.wedges)}<span class="nm">${q.online||k===V.me?'<i class="on"></i>':''}${esc(q.name)}</span></div>`).join('')}</div>`;}
 
 function render(){
   const app=$('app');
   if(!V)return;
+  setLive(live);
   if(V.mode==='setup'){const ae=document.activeElement;
     const key=JSON.stringify([V.lobby,V.me,V.resume]);
     if(ae&&ae.matches&&ae.matches('#app input')&&app.dataset.key===key)return;
     app.dataset.key=key;return renderSetup(app);}
   app.dataset.key='';
   if(V.me<0&&!watch)return renderWho(app);
+  watch=V.me<0&&watch;
   const p=V.players[V.cur],me=V.me,mine=me===V.cur;
   let h='';
   if(me>=0)h+=`<div class="turn"><div class="pawn" style="background:${V.players[me].color}">${me+1}</div><div><span>Tu joues</span><strong>${esc(V.players[me].name)}</strong></div></div>`;
@@ -159,11 +191,11 @@ function render(){
   if(V.phase!=='question'&&V.phase!=='win'){body+=turnTitle;if(V.msg)body+=`<p class="msg muted">${esc(V.msg)}</p>`;}
   if(V.phase==='roll'){
     if(V.rolling)body+=`<div class="row"><span class="die rolling">?</span><span class="muted">Le dé roule…</span></div>`;
-    else if(V.canPlay)body+=`<button class="btn btn-main" data-a="roll">🎲 Lancer le dé</button>`;
+    else if(V.canPlay)body+=`<button class="btn btn-main" data-a="roll">🎲 Lancer le dé${mine?'':' pour '+esc(p.name)}</button>`;
     else body+=wait(`${esc(p.name)} lance le dé…`);
   }
   if(V.phase==='choose'){
-    body+=`<div class="row"><span class="die">${V.roll}</span><span class="muted">${V.canPlay?'Choisis ta case':esc(p.name)+' choisit sa case…'}</span></div>`;
+    body+=`<div class="row"><span class="die">${V.roll}</span><span class="muted">${V.canPlay?(mine?'Choisis ta case':'Choisis la case de '+esc(p.name)):esc(p.name)+' choisit sa case…'}</span></div>`;
     if(V.canPlay)body+=V.options.map(o=>`<button class="dir" data-a="go" data-i="${o.i}"><span class="sw" style="background:${o.c}"></span><span>${o.dir?o.dir+' ':''}${esc(o.t)}</span></button>`).join('');
   }
   if(V.phase==='final'){
@@ -173,10 +205,11 @@ function render(){
   }
   let main=`<div class="panel">${body}</div>`;
   if(V.phase==='question'&&V.q){const q=V.q;let foot;
-    if(V.canJudge)foot=q.shown?`<div class="ans"><small>Réponse</small>${esc(q.answer)}</div><div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`
+    if(mine)foot=`<div class="ans" style="background:#f2c230"><small style="color:#5a4700">À toi</small>Réponds à voix haute !</div>`;
+    else if(V.canJudge)foot=q.shown?`<div class="ans"><small>Réponse</small>${esc(q.answer)}</div><div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`
         :`<button class="btn dark-btn" data-a="show">Voir la réponse</button>`;
-    else if(mine)foot=`<div class="ans" style="background:#f2c230"><small style="color:#5a4700">À toi</small>Réponds à voix haute !</div>`;
     else foot=`<p class="msg" style="color:#6b6352">${esc(p.name)} répond…</p>`;
+    if(mine&&V.canJudge)foot+=`<p class="hint" style="color:#6b6352">Personne d'autre n'a de téléphone : un autre joueur peut juger depuis le tien.</p>`+(q.shown?`<div class="judge"><button class="btn ok" data-a="ok">Bonne réponse</button><button class="btn ko" data-a="ko">Raté</button></div>`:`<button class="btn dark-btn" data-a="show">Voir la réponse (pour l'arbitre)</button>`);
     main=`<div class="card"><div class="card-head" style="background:${q.color};color:${q.ink}"><span>${esc(q.cat)}</span><em>${esc(q.tag)}</em></div><div class="card-body">
       ${mine?'':`<span style="font-size:.8rem;color:#6b6352;font-weight:700">Question pour ${esc(p.name)}</span>`}<p class="q">${esc(q.text)}</p>${foot}</div></div>`;
   }
@@ -193,36 +226,51 @@ function render(){
     if(this.classList.contains('armed')){clearTimeout(armT);act('newgame');return}
     this.classList.add('armed');this.textContent='Confirmer ?';armT=setTimeout(()=>{this.classList.remove('armed');this.textContent='Nouvelle partie'},3000);};
 }
+
+/* « Qui es-tu ? » en cours de partie : libres en avant, déjà pris en retrait */
 function renderWho(app){
-  let h=`<div class="panel"><span class="label">Partie en cours</span><p class="q" style="margin:0">Qui es-tu ?</p>`;
-  h+=V.players.map((q,k)=>`<button class="dir" data-a="iam" data-k="${k}"><span class="pawn" style="background:${q.color}">${k+1}</span><span style="flex:1">${esc(q.name)}</span>${q.taken?'<span class="muted" style="font-weight:400;font-size:.85rem">déjà pris</span>':''}</button>`).join('');
-  h+=`</div><button class="btn btn-ghost" id="watch">Juste regarder</button>`;
+  const free=V.players.filter(q=>!q.online).length;
+  let h=`<div class="panel"><span class="label">Partie en cours</span><p class="q" style="margin:0">Qui es-tu ?</p>
+    <p class="hint">${free?'Touche ton prénom.':'Tous les joueurs ont déjà un téléphone. Touche un prénom pour prendre sa place.'}</p><div class="who">`;
+  const order=V.players.map((q,k)=>k).sort((a,b)=>(V.players[a].online-V.players[b].online)||a-b);
+  h+=order.map(k=>{const q=V.players[k],asking=askK===k;
+    const st=q.online?(asking?'Toucher à nouveau pour confirmer':'<i class="dot"></i>Connecté ailleurs'):'Libre · c’est moi';
+    return `<button class="pl ${q.online?(asking?'ask':'busy'):'free'}" data-who="${k}"><span class="pawn" style="background:${q.color}">${k+1}</span><span class="nm">${esc(q.name)}</span><span class="st">${st}</span></button>`;}).join('');
+  h+=`</div></div><button class="btn btn-ghost" id="watch">Juste regarder</button>`;
   app.innerHTML=h;
+  app.querySelectorAll('[data-who]').forEach(b=>b.onclick=()=>{const k=+b.dataset.who,q=V.players[k];
+    if(q.online&&askK!==k){askK=k;clearTimeout(askT);askT=setTimeout(()=>{askK=-1;render()},4000);render();return;}
+    askK=-1;b.classList.remove('free','busy','ask');b.classList.add('me');b.querySelector('.st').textContent='Connexion…';act('iam',{k});});
   $('watch').onclick=()=>{watch=true;render();};
 }
+
+/* salon avant la partie */
 function renderSetup(app){
   const me=V.me,n=V.lobby.length;
   let h='';
   if(me<0){
     h+=`<div class="panel"><span class="label">Nouvelle partie</span><p class="q" style="margin:0">Qui es-tu ?</p>`;
-    if(n<4)h+=`<div class="name-row"><div class="pawn" style="background:${PCOL[n]}">${n+1}</div><input id="myname" maxlength="14" placeholder="Ton prénom" value="${esc(LS.get('camemberts-name'))}" autocomplete="off" enterkeyhint="go"></div><button class="btn btn-main" id="join">Rejoindre la partie</button>`;
+    if(n<4)h+=`<p class="hint">Entre ton prénom pour rejoindre la partie sur la TV.</p><div class="name-row"><div class="pawn" style="background:${PCOL[n]}">${n+1}</div><input id="myname" maxlength="14" placeholder="Ton prénom" value="${esc(LS.get('camemberts-name'))}" autocomplete="off" enterkeyhint="go"></div><button class="btn btn-main" id="join">Rejoindre la partie</button>`;
     else h+=wait('La partie est complète (4 joueurs).');
     h+=`</div>`;
-  }else{
-    h+=`<div class="panel"><span class="label">Tu es inscrit·e</span><div class="turn"><div class="pawn" style="background:${PCOL[me]}">${me+1}</div><strong>${esc(V.lobby[me])}</strong></div>`;
-    h+=n>=2?`<button class="btn btn-main" data-a="start">Lancer la partie (${n} joueurs)</button>`:wait('En attente d’au moins un autre joueur…');
-    h+=`<button class="btn-small" id="leave" style="align-self:flex-start">Changer de prénom</button></div>`;
   }
-  if(n)h+=`<div class="panel"><span class="label">Joueurs inscrits (${n}/4)</span>${V.lobby.map((nm,k)=>`<div class="row"><div class="pawn" style="background:${PCOL[k]}">${k+1}</div><span>${esc(nm)}${k===me?' <span class="muted">(toi)</span>':''}</span></div>`).join('')}</div>`;
+  h+=`<div class="panel"><span class="label">Joueurs (${n}/4)</span><div class="who">`;
+  for(let k=0;k<4;k++){const l=V.lobby[k];
+    if(l)h+=`<div class="pl${k===me?' me':''}"><span class="pawn" style="background:${PCOL[k]}">${k+1}</span><span class="nm">${esc(l.name)}${k===me?' <span class="muted" style="font-weight:400">(toi)</span>':''}</span><span class="st"><i class="dot${l.online?'':' off'}"></i>${l.online?'Prêt':'Déconnecté'}</span></div>`;
+    else h+=`<div class="pl" style="border-style:dashed;opacity:.5"><span class="pawn" style="background:${PCOL[k]}">${k+1}</span><span class="nm muted" style="font-weight:400">Place libre</span></div>`;}
+  h+=`</div>`;
+  if(me>=0){h+=n>=2?`<button class="btn btn-main" data-a="start">Lancer la partie à ${n}</button>`:wait('En attente d’au moins un autre joueur… Faites-lui scanner le QR code de la TV.');
+    h+=`<button class="btn-small" id="leave" style="align-self:flex-start">Changer de prénom</button>`;}
+  h+=`</div>`;
   if(V.resume)h+=`<div class="panel"><span class="label">Partie sauvegardée</span><p class="msg muted">${esc(V.resume.join(', '))}</p><button class="btn btn-ghost" data-a="resume">Reprendre cette partie</button></div>`;
   app.innerHTML=h;
-  const j=$('join');if(j){const go=()=>{const v=$('myname').value.trim();if(!v){$('myname').focus();return}LS.set('camemberts-name',v);act('join',{name:v});};
+  const j=$('join');if(j){const go=()=>{const v=$('myname').value.trim();if(!v){$('myname').focus();return}LS.set('camemberts-name',v);$('myname').blur();act('join',{name:v});};
     j.onclick=go;$('myname').addEventListener('keydown',e=>{if(e.key==='Enter')go();});}
   const l=$('leave');if(l)l.onclick=()=>{LS.set('camemberts-name','');act('leave');};
 }
 $('app').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;
   const a=b.dataset.a;
-  if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc'||a==='iam')act(a,{k:+b.dataset.k});else act(a);
+  if(a==='go')act('go',{i:+b.dataset.i});else if(a==='fc')act(a,{k:+b.dataset.k});else act(a);
   b.disabled=true;});
 
 $('app').innerHTML=`<div class="panel"><p class="msg muted">Connexion à la TV${code?' (code <b>'+esc(code)+'</b>)':''}…</p></div>`;
